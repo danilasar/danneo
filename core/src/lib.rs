@@ -6,6 +6,12 @@ pub mod apanel;
 pub mod blocks;
 pub mod acl;
 
+rust_i18n::i18n!("locales");
+
+pub fn init_i18n() {
+    rust_i18n::set_locale("ru");
+}
+
 use axum::{
     routing::{get, post},
     extract::State,
@@ -67,12 +73,18 @@ pub async fn run() {
         .route("/agroups/delete/:id", get(apanel::agroups::delete_group))
         .layer(axum::middleware::from_fn_with_state(app_state.clone(), apanel::middleware::admin_acl_middleware));
 
+    let static_dir = if std::path::Path::new("core/static").exists() {
+        "core/static"
+    } else {
+        "./static"
+    };
+
     let app = Router::new()
         .route("/", get(root))
         .route("/admin/login", get(auth::show_login_page))
         .route("/api/admin/login", post(auth::admin_login))
         .nest("/admin", admin_routes)
-        .nest_service("/static", tower_http::services::ServeDir::new("./static"))
+        .nest_service("/static", tower_http::services::ServeDir::new(static_dir))
         .with_state(app_state);
 
     // Запуск сервера

@@ -1,9 +1,11 @@
-use crate::models::core_settings;
-use crate::blocks::BlockManager;
 use crate::acl::service::AclService;
+use crate::blocks::BlockManager;
+use crate::models::core_settings;
 use sea_orm::{DatabaseConnection, EntityTrait};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::sync::Arc;
+use tera::{Function, Result as TeraResult, Tera, Value};
 
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]
 pub struct GlobalSettings {
@@ -61,17 +63,19 @@ impl AppState {
         }
         let settings = Arc::new(tokio::sync::RwLock::new(settings));
 
-        let jwt_secret = std::env::var("JWT_SECRET").unwrap_or_else(|_| "super_secret_key".to_string());
-        
+        let jwt_secret =
+            std::env::var("JWT_SECRET").unwrap_or_else(|_| "super_secret_key".to_string());
+
         let block_manager = Arc::new(BlockManager::new());
 
         // Инициализируем ACL
-        let model_path = if std::path::Path::new("core/casbin_models/rbac_with_level.conf").exists() {
+        let model_path = if std::path::Path::new("core/casbin_models/rbac_with_level.conf").exists()
+        {
             "core/casbin_models/rbac_with_level.conf"
         } else {
             "casbin_models/rbac_with_level.conf"
         };
-        
+
         let acl = AclService::new_db(db_arc.clone(), model_path).await;
         let acl = Arc::new(acl);
 
@@ -81,12 +85,27 @@ impl AppState {
         } else {
             "templates/**/*"
         };
-        
-        let tera = tera::Tera::new(template_path)
-            .map_err(|e| format!("Failed to initialize Tera: {}", e))?;
 
-        Ok(Self { 
-            db: db_arc, 
+        let mut tera =
+            Tera::new(template_path).map_err(|e| format!("Failed to initialize Tera: {}", e))?;
+
+        rust_i18n::set_locale("ru");
+        struct I18nFunction;
+        impl Function for I18nFunction {
+            fn call(&self, args: &HashMap<String, Value>) -> TeraResult<Value> {
+                let key = args
+                    .get("key")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| tera::Error::msg("Missing 'key' argument"))?;
+                // Используем функцию t из rust_i18n.
+                // Если она конфликтует с макросом, можно попробовать вызвать через полное имя
+                Ok(Value::String(rust_i18n::t!(key).to_string()))
+            }
+        }
+        tera.register_function("t", I18nFunction);
+
+        Ok(Self {
+            db: db_arc,
             settings,
             tera: Arc::new(tera),
             block_manager,

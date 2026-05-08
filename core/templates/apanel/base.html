@@ -20,7 +20,7 @@
     <script>
         $(function () {
             $.template = "Old";
-            $.errors = "Ошибка";
+            $.errors = "{{ t(key='admin_error') }}";
             $.system();
 
             $("#menu-toggle").click(function () {
@@ -39,64 +39,64 @@
     <div id="wrapper">
         <div id="header">
             <div id="hgroup">
-                <h1 id="logo">Панель управления</h1>
+                <h1 id="logo">{{ t(key='admin_panel') }}</h1>
             </div>
         </div>
         <ul id="nav">
             <li id="nav-left">
-                <a href="/" target="_blank">Перейти на сайт</a>
-                <a href="/admin/dashboard">Главная Апанели</a>
+                <a href="/" target="_blank">{{ t(key='admin_goto_site') }}</a>
+                <a href="/admin/dashboard">{{ t(key='admin_dashboard') }}</a>
             </li>
             <li id="nav-right">
-                <a href="#" onclick="logout()">Выход</a>
+                <a href="#" onclick="logout()">{{ t(key='admin_exit') }}</a>
             </li>
         </ul>
         <div id="content">
             <table id="content-table">
                 <tr>
                     <td id="aside" class="menuinterface bill">
-                        <div class="menupanelin">Управление контентом</div>
+                        <div class="menupanelin">{{ t(key='admin_content') }}</div>
                         <div class="menu-content">
                             <div class="panels menupanel" id="infopages">
-                                <img src="/static/apanel/images/menu/infopages.gif" alt=""> <span>Инфо страницы</span>
+                                <img src="/static/apanel/images/menu/infopages.gif" alt=""> <span>{{ t(key='admin_infopages') }}</span>
                             </div>
                             <div class="mcont" style="display:none">
-                                <a class="interface" href="#">Список страниц</a>
-                                <a class="interface" href="#">Добавить страницу</a>
+                                <a class="interface" href="#">{{ t(key='admin_list') }}</a>
+                                <a class="interface" href="#">{{ t(key='admin_add') }}</a>
                             </div>
 
                             <div class="panels menupanel" id="news">
-                                <img src="/static/apanel/images/menu/news.gif" alt=""> <span>Новости</span>
+                                <img src="/static/apanel/images/menu/news.gif" alt=""> <span>{{ t(key='admin_news') }}</span>
                             </div>
                             <div class="mcont" style="display:none">
-                                <a class="interface" href="#">Список новостей</a>
-                                <a class="interface" href="#">Добавить новость</a>
+                                <a class="interface" href="#">{{ t(key='admin_list') }}</a>
+                                <a class="interface" href="#">{{ t(key='admin_add') }}</a>
                             </div>
                         </div>
 
-                        <div class="menupanelin">Система</div>
+                        <div class="menupanelin">{{ t(key='admin_system') }}</div>
                         <div class="menu-system">
                             <div class="panels menupanel" id="setting">
-                                <img src="/static/apanel/images/menu/setting.gif" alt=""> <span>Настройки</span>
+                                <img src="/static/apanel/images/menu/setting.gif" alt=""> <span>{{ t(key='admin_settings_title') }}</span>
                             </div>
                             <div class="mcont" style="display:none">
-                                <a class="interface" href="/admin/settings">Глобальные настройки</a>
-                                <a class="interface" href="/admin/design">Управление оформлением</a>
-                                <a class="interface" href="/admin/blocks">Управление блоками</a>
-                                <a class="interface" href="/admin/menu">Управление меню</a>
+                                <a class="interface" href="/admin/settings">{{ t(key='admin_settings') }}</a>
+                                <a class="interface" href="/admin/design">{{ t(key='admin_design') }}</a>
+                                <a class="interface" href="/admin/blocks">{{ t(key='admin_blocks') }}</a>
+                                <a class="interface" href="/admin/menu">{{ t(key='admin_menu') }}</a>
                             </div>
 
                             <div class="panels menupanel" id="access">
-                                <img src="/static/apanel/images/menu/user.gif" alt=""> <span>Безопасность</span>
+                                <img src="/static/apanel/images/menu/user.gif" alt=""> <span>{{ t(key='admin_security') }}</span>
                             </div>
                             <div class="mcont" style="display:none">
-                                <a class="interface" href="/admin/amanage">Администраторы</a>
-                                <a class="interface" href="/admin/agroups">Группы доступа</a>
+                                <a class="interface" href="/admin/amanage">{{ t(key='admin_amanage') }}</a>
+                                <a class="interface" href="/admin/agroups">{{ t(key='admin_agroups') }}</a>
                             </div>
                         </div>
                     </td>
                     <td class="panelinterface" id="menu-toggle">
-                        <img id="menup" src="/static/apanel/images/closed.gif" alt="Открыть/Закрыть" />
+                        <img id="menup" src="/static/apanel/images/closed.gif" alt="{{ t(key='admin_toggle_menu') }}" />
                     </td>
                     <td id="section" class="bill">
                         <div class="article">
