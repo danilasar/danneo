@@ -2,7 +2,7 @@ use crate::{auth::Claims, state::AppState};
 use axum::{
     extract::{Form, State},
     http::StatusCode,
-    response::{Html, IntoResponse, Redirect},
+    response::{IntoResponse, Redirect},
 };
 use serde::Deserialize;
 use std::sync::Arc;
@@ -20,7 +20,6 @@ pub async fn show_design(_claims: Claims, State(state): State<Arc<AppState>>) ->
 
     let mut context = Context::new();
     context.insert("site_temp", theme);
-    context.insert("site_name", &settings.site_name);
 
     // Читаем index.html
     let index_path = format!("core/templates/frontend/{}/index.html", theme);
@@ -41,14 +40,7 @@ pub async fn show_design(_claims: Claims, State(state): State<Arc<AppState>>) ->
         &serde_json::to_string(&css_content).unwrap(),
     );
 
-    match state.tera.render("apanel/design.html", &context) {
-        Ok(html) => Html(html).into_response(),
-        Err(e) => {
-            eprintln!("Tera error: {:?}", e);
-            tracing::error!("Template rendering error: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
-    }
+    crate::apanel::render_admin_template(state.clone(), "apanel/design.html", context).await
 }
 
 pub async fn save_file(
@@ -115,7 +107,7 @@ mod tests {
             .with_state(state);
 
         let auth_service = AuthService::new(jwt_secret);
-        let token = auth_service.create_token(1, 9999999999).unwrap();
+        let token = auth_service.create_token(1, 9999999999, 1000000000).unwrap();
 
         let response = app
             .oneshot(
@@ -142,7 +134,7 @@ mod tests {
             .with_state(state);
 
         let auth_service = AuthService::new(jwt_secret);
-        let token = auth_service.create_token(1, 9999999999).unwrap();
+        let token = auth_service.create_token(1, 9999999999, 1000000000).unwrap();
 
         let form_data = "file_name=../../etc/passwd&content=hacking";
 

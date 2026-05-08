@@ -2,9 +2,9 @@ use crate::{auth::Claims, models::core_settings, state::AppState};
 use axum::{
     extract::{Form, State},
     http::StatusCode,
-    response::{Html, IntoResponse, Redirect},
+    response::{IntoResponse, Redirect},
 };
-use sea_orm::{ActiveModelTrait, EntityTrait, Set};
+use sea_orm::{EntityTrait, Set};
 use serde::Deserialize;
 use std::sync::Arc;
 use tera::Context;
@@ -23,7 +23,6 @@ pub async fn show_settings(
 ) -> impl IntoResponse {
     let mut context = Context::new();
     let settings = state.settings.read().await;
-    context.insert("site_name", &settings.site_name);
     context.insert("admin_email", &settings.admin_email);
     context.insert("site_url", &settings.site_url);
     context.insert("site_temp", &settings.site_temp);
@@ -32,14 +31,7 @@ pub async fn show_settings(
     let themes = vec!["Soft", "Old", "Clear"];
     context.insert("themes", &themes);
 
-    match state.tera.render("apanel/settings.html", &context) {
-        Ok(html) => Html(html).into_response(),
-        Err(e) => {
-            eprintln!("Tera error: {:?}", e);
-            tracing::error!("Template rendering error: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
-    }
+    crate::apanel::render_admin_template(state.clone(), "apanel/settings.html", context).await
 }
 
 pub async fn save_settings(
@@ -121,7 +113,7 @@ mod tests {
 
         // Создаем токен для теста
         let auth_service = AuthService::new(jwt_secret);
-        let token = auth_service.create_token(1, 9999999999).unwrap();
+        let token = auth_service.create_token(1, 9999999999, 1000000000).unwrap();
 
         let response = app
             .oneshot(
@@ -149,7 +141,7 @@ mod tests {
             .with_state(state);
 
         let auth_service = AuthService::new(jwt_secret);
-        let token = auth_service.create_token(1, 9999999999).unwrap();
+        let token = auth_service.create_token(1, 9999999999, 1000000000).unwrap();
 
         let form_data =
             "site_name=New+Name&admin_email=new@test.com&site_url=http://new.com&site_temp=Old";

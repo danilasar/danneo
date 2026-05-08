@@ -3,9 +3,9 @@ use crate::state::AppState;
 use axum::{
     Form,
     extract::{Path, State},
-    response::{Html, IntoResponse, Redirect},
+    response::{IntoResponse, Redirect},
 };
-use casbin::{CoreApi, MgmtApi};
+use casbin::MgmtApi;
 use sea_orm::{ActiveModelTrait, EntityTrait, QueryOrder, Set};
 use serde::Deserialize;
 use std::sync::Arc;
@@ -63,15 +63,9 @@ pub async fn list_groups(State(state): State<Arc<AppState>>) -> impl IntoRespons
         .unwrap_or_default();
 
     let mut context = tera::Context::new();
-    let settings = state.settings.read().await;
-    context.insert("site_name", &settings.site_name);
     context.insert("groups", &groups);
 
-    let html = state
-        .tera
-        .render("apanel/agroups_list.html", &context)
-        .unwrap();
-    Html(html)
+    crate::apanel::render_admin_template(state, "apanel/agroups_list.html", context).await
 }
 
 /// Форма редактирования/создания группы
@@ -113,17 +107,11 @@ pub async fn edit_group(
     }
 
     let mut context = tera::Context::new();
-    let settings = state.settings.read().await;
-    context.insert("site_name", &settings.site_name);
     context.insert("group", &group);
     context.insert("available_modules", &available_modules);
     context.insert("current_permissions", &current_permissions);
 
-    let html = state
-        .tera
-        .render("apanel/agroups_edit.html", &context)
-        .unwrap();
-    Html(html)
+    crate::apanel::render_admin_template(state, "apanel/agroups_edit.html", context).await
 }
 
 /// Сохранение группы

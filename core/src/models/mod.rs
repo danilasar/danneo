@@ -5,7 +5,7 @@ pub mod core_block_posit;
 pub mod core_blocks;
 pub mod core_menu_groups;
 pub mod core_menu_items;
-pub mod core_modules;
 pub mod core_module_entities;
 pub mod core_module_routes;
+pub mod core_modules;
 pub mod core_settings;

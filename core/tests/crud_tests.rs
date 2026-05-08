@@ -1,8 +1,8 @@
 //! Tests for dynamic CRUD module
 
+use danneo_core::crud::{self, EntitySchema, FieldSchema};
 use sea_orm::{Database, DatabaseConnection, DbErr};
 use serde_json::json;
-use danneo_core::crud::{self, EntitySchema, FieldSchema};
 
 #[tokio::test]
 async fn test_create_insert_select() -> Result<(), DbErr> {

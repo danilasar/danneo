@@ -1,18 +1,21 @@
-use std::sync::Arc;
-use std::collections::HashMap;
-use sea_orm::{DatabaseConnection, EntityTrait, QueryFilter, ColumnTrait};
+use crate::blocks::{BlockContext, DanneoBlock};
 use crate::models::core_block_definitions;
-use crate::blocks::{DanneoBlock, BlockContext};
+use crate::registry::ScriptEngine;
+use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
+use std::collections::HashMap;
+use std::sync::Arc;
 
 pub struct BlockRegistry {
     pub db: Arc<DatabaseConnection>,
+    pub script_engine: Arc<ScriptEngine>,
     renderers: HashMap<&'static str, Box<dyn DanneoBlock>>,
 }
 
 impl BlockRegistry {
-    pub fn new(db: Arc<DatabaseConnection>) -> Self {
+    pub fn new(db: Arc<DatabaseConnection>, script_engine: Arc<ScriptEngine>) -> Self {
         let mut registry = Self {
             db,
+            script_engine,
             renderers: HashMap::new(),
         };
         // Register native renderers
@@ -59,7 +62,13 @@ impl BlockRegistry {
         }
     }
 
-    pub async fn render_block(&self, block_code: &str, ctx: Arc<BlockContext>, settings: Option<serde_json::Value>) -> Option<String> {
+    pub async fn render_block(
+        &self,
+        block_code: &str,
+        ctx: Arc<BlockContext>,
+        settings: Option<serde_json::Value>,
+        tera: &tera::Tera,
+    ) -> Option<String> {
         let definition = core_block_definitions::Entity::find()
             .filter(core_block_definitions::Column::BlockCode.eq(block_code))
             .filter(core_block_definitions::Column::Enabled.eq(true))
@@ -67,23 +76,112 @@ impl BlockRegistry {
             .await
             .unwrap_or(None)?;
 
-        let identifier = match definition.renderer_type.as_str() {
-            "native" => block_code,
-            _ => block_code,
-        };
+        match definition.renderer_type.as_str() {
+            "native" => {
+                if let Some(renderer) = self.renderers.get(block_code) {
+                    return Some(renderer.render(ctx, settings).await);
+                }
+            }
+            "script" => {
+                let module_code = definition.module_code.as_ref()?;
+                let arg = serde_json::json!({
+                    "block_code": block_code,
+                    "settings": settings,
+                });
+                let dynamic_arg = script_rhai::serde::to_dynamic(arg).unwrap();
 
-        if let Some(renderer) = self.renderers.get(identifier) {
-            Some(renderer.render(ctx, settings).await)
-        } else {
-            tracing::warn!("Renderer for block {} not found", block_code);
-            None
+                match self
+                    .script_engine
+                    .call_hook(module_code, "render_block", dynamic_arg)
+                    .await
+                {
+                    Ok(res) => {
+                        if let Some(html) = res.clone().try_cast::<String>() {
+                            return Some(html);
+                        } else if let Some(res_map) = res.try_cast::<script_rhai::Map>() {
+                            let template = res_map
+                                .get("template")
+                                .and_then(|v| v.clone().into_string().ok())?;
+                            let context_val =
+                                res_map.get("context").cloned().unwrap_or_else(|| {
+                                    script_rhai::Dynamic::from(script_rhai::Map::new())
+                                });
+
+                            let mut context = tera::Context::new();
+                            if let Ok(ctx_json) =
+                                script_rhai::serde::from_dynamic::<serde_json::Value>(&context_val)
+                            {
+                                if let Some(obj) = ctx_json.as_object() {
+                                    for (k, v) in obj {
+                                        context.insert(k, v);
+                                    }
+                                }
+                            }
+                            if let Some(s) = settings {
+                                context.insert("settings", &s);
+                            }
+
+                            let full_template_path =
+                                format!("{}/templates/{}", module_code, template);
+                            match tera.render(&full_template_path, &context) {
+                                Ok(html) => return Some(html),
+                                Err(e) => {
+                                    tracing::error!(
+                                        "Block {} script template error: {}",
+                                        block_code,
+                                        e
+                                    );
+                                    return Some(format!("Template error: {}", e));
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        tracing::error!("Block {} script error: {}", block_code, e);
+                        return Some(format!("Script error: {}", e));
+                    }
+                }
+            }
+            "declarative" => {
+                let mut context = tera::Context::new();
+                if let Some(s) = settings {
+                    context.insert("settings", &s);
+                }
+
+                context.insert(
+                    "items",
+                    &vec![
+                        serde_json::json!({"message": "Привет из декларативного блока!"}),
+                        serde_json::json!({"message": "Контент из модуля Hello."}),
+                    ],
+                );
+
+                if let Some(template_path) = definition.template_path {
+                    let full_template_path = format!("{}/{}", block_code, template_path);
+                    match tera.render(&full_template_path, &context) {
+                        Ok(html) => return Some(html),
+                        Err(e) => {
+                            tracing::error!("Block {} template error: {}", block_code, e);
+                            return Some(format!("Template error: {}", e));
+                        }
+                    }
+                }
+            }
+            _ => {}
         }
+
+        tracing::warn!("Renderer for block {} not found or failed", block_code);
+        None
     }
 
-    pub async fn get_all_positions_html(&self, ctx: Arc<BlockContext>) -> HashMap<String, String> {
+    pub async fn get_all_positions_html(
+        &self,
+        ctx: Arc<BlockContext>,
+        tera: &tera::Tera,
+    ) -> HashMap<String, String> {
         use crate::models::core_blocks;
         use sea_orm::QueryOrder;
-        
+
         let db = &self.db;
         let mut results = HashMap::new();
 
@@ -103,7 +201,10 @@ impl BlockRegistry {
 
         for config in blocks_configs {
             let block_code = config.block_file.as_str(); // using block_file as block_code
-            if let Some(block_html) = self.render_block(block_code, ctx.clone(), config.block_setting).await {
+            if let Some(block_html) = self
+                .render_block(block_code, ctx.clone(), config.block_setting, tera)
+                .await
+            {
                 let entry = results
                     .entry(config.positcode.clone())
                     .or_insert_with(String::new);

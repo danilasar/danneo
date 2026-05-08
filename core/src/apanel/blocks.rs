@@ -6,7 +6,7 @@ use crate::{
 use axum::{
     extract::{Form, State},
     http::StatusCode,
-    response::{Html, IntoResponse, Redirect},
+    response::{IntoResponse, Redirect},
 };
 use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, QueryOrder, Set};
 use serde::Deserialize;
@@ -44,17 +44,9 @@ pub async fn list_positions(
     };
 
     let mut context = Context::new();
-    let settings = state.settings.read().await;
-    context.insert("site_name", &settings.site_name);
     context.insert("positions", &positions);
 
-    match state.tera.render("apanel/blocks_positions.html", &context) {
-        Ok(html) => Html(html).into_response(),
-        Err(e) => {
-            tracing::error!("Template rendering error: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
-    }
+    crate::apanel::render_admin_template(state, "apanel/blocks_positions.html", context).await
 }
 
 pub async fn save_position(
@@ -112,18 +104,10 @@ pub async fn list_blocks(_claims: Claims, State(state): State<Arc<AppState>>) ->
     };
 
     let mut context = Context::new();
-    let settings = state.settings.read().await;
-    context.insert("site_name", &settings.site_name);
     context.insert("positions", &positions);
     context.insert("blocks", &blocks);
 
-    match state.tera.render("apanel/blocks_list.html", &context) {
-        Ok(html) => Html(html).into_response(),
-        Err(e) => {
-            tracing::error!("Template rendering error: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
-    }
+    crate::apanel::render_admin_template(state, "apanel/blocks_list.html", context).await
 }
 
 pub async fn edit_block(
@@ -143,7 +127,10 @@ pub async fn edit_block(
         None
     };
 
-    let positions = match crate::models::core_block_posit::Entity::find().all(db).await {
+    let positions = match crate::models::core_block_posit::Entity::find()
+        .all(db)
+        .await
+    {
         Ok(p) => p,
         _ => vec![],
     };
@@ -158,19 +145,11 @@ pub async fn edit_block(
     };
 
     let mut context = Context::new();
-    let settings = state.settings.read().await;
-    context.insert("site_name", &settings.site_name);
     context.insert("block", &block);
     context.insert("positions", &positions);
     context.insert("block_definitions", &block_definitions);
 
-    match state.tera.render("apanel/block_edit.html", &context) {
-        Ok(html) => Html(html).into_response(),
-        Err(e) => {
-            tracing::error!("Template rendering error: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
-    }
+    crate::apanel::render_admin_template(state, "apanel/block_edit.html", context).await
 }
 
 #[derive(Deserialize)]
@@ -283,7 +262,7 @@ mod tests {
             .with_state(state);
 
         let auth_service = AuthService::new(jwt_secret);
-        let token = auth_service.create_token(1, 9999999999).unwrap();
+        let token = auth_service.create_token(1, 9999999999, 1000000000).unwrap();
 
         let response = app
             .oneshot(
@@ -313,7 +292,7 @@ mod tests {
             .with_state(state);
 
         let auth_service = AuthService::new(jwt_secret);
-        let token = auth_service.create_token(1, 9999999999).unwrap();
+        let token = auth_service.create_token(1, 9999999999, 1000000000).unwrap();
 
         let response = app
             .oneshot(
@@ -346,7 +325,7 @@ mod tests {
             .with_state(state);
 
         let auth_service = AuthService::new(jwt_secret);
-        let token = auth_service.create_token(1, 9999999999).unwrap();
+        let token = auth_service.create_token(1, 9999999999, 1000000000).unwrap();
 
         let response = app
             .oneshot(

@@ -1,0 +1,27 @@
+{% extends "frontend/Soft/index.html" %}
+
+{% block content %}
+{% if news | length > 0 %}
+{% for item in news %}
+<div class="cont">
+    <div class="conttitle">
+        <div class="time"><img src="{{ site_url }}/static/frontend/{{ site_temp }}/images/icon-time.gif" alt="" /> {{ item.created_at }}</div>
+        {{ item.title }}
+    </div>
+    <div class="conttext">
+        {% if item.thumbs %}
+            {% for thumb in item.thumbs %}
+                <div class="{{ thumb.float | default(value='left') }}"><img src="{{ site_url }}{{ thumb.src }}" alt="" /></div>
+            {% endfor %}
+        {% endif %}
+        {{ item.content | safe }}
+    </div>
+    <div class="continfo">
+        <a href="/news/{{ item.id }}">Подробнее</a> <img src="{{ site_url }}/static/frontend/{{ site_temp }}/images/link.gif" alt="" />
+    </div>
+</div>
+{% endfor %}
+{% else %}
+    <p>Новостей пока нет.</p>
+{% endif %}
+{% endblock %}

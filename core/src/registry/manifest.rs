@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use crate::registry::RouteDescriptor;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PackageManifest {
@@ -10,6 +11,8 @@ pub struct PackageManifest {
     pub install: Option<InstallOptions>,
     pub entrypoints: Option<Entrypoints>,
     pub capabilities: Option<Capabilities>,
+    pub frontend_routes: Option<Vec<RouteDescriptor>>,
+    pub admin_routes: Option<Vec<RouteDescriptor>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -50,6 +53,26 @@ pub struct Entrypoints {
     pub permissions: Option<String>,
     pub hooks: Option<String>,
     pub entities: Option<String>,
+    pub admin_menu: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AdminMenu {
+    pub groups: Vec<AdminMenuGroup>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AdminMenuGroup {
+    pub id: String,
+    pub name: String,
+    pub icon: Option<String>,
+    pub items: Vec<AdminMenuItem>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AdminMenuItem {
+    pub name: String,
+    pub link: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

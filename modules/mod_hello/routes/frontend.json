@@ -1,0 +1,10 @@
+[
+    {
+        "name": "mod_hello.index",
+        "method": "GET",
+        "path": "/hello",
+        "handler": "entity.list",
+        "entity": "Greetings",
+        "template": "index.html"
+    }
+]

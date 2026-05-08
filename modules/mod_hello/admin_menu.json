@@ -1,0 +1,14 @@
+{
+    "groups": [
+        {
+            "id": "content",
+            "name": "Управление контентом",
+            "items": [
+                {
+                    "name": "Приветствия",
+                    "link": "/admin/crud/mod_hello/mod_hello_greetings/list"
+                }
+            ]
+        }
+    ]
+}

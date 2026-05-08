@@ -1,20 +1,34 @@
 use crate::models::core_modules;
-use crate::registry::ScriptEngine;
-use sea_orm::{ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set, IntoActiveModel};
-use std::sync::Arc;
+use crate::registry::{AdminMenu, RouteDescriptor, RouteRegistry, ScriptEngine};
+use sea_orm::{
+    ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, IntoActiveModel, QueryFilter,
+    Set,
+};
+use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 pub struct ModuleRegistry {
     pub db: Arc<DatabaseConnection>,
+    pub admin_menus: Arc<tokio::sync::RwLock<HashMap<String, AdminMenu>>>,
 }
 
 impl ModuleRegistry {
     pub fn new(db: Arc<DatabaseConnection>) -> Self {
-        Self { db }
+        Self {
+            db,
+            admin_menus: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
+        }
     }
 
-    pub async fn init(&self, script_engine: Arc<ScriptEngine>, packages_dir: PathBuf) {
+    pub async fn init(
+        &self,
+        script_engine: Arc<ScriptEngine>,
+        routes: Arc<tokio::sync::RwLock<RouteRegistry>>,
+        packages_dir: PathBuf,
+    ) {
         tracing::info!("Initializing ModuleRegistry");
+        self.admin_menus.write().await.clear(); // Clear existing menus before loading fresh ones
 
         match core_modules::Entity::find()
             .filter(core_modules::Column::Enabled.eq(true))
@@ -24,13 +38,69 @@ impl ModuleRegistry {
             Ok(modules) => {
                 tracing::info!("Loaded {} active modules", modules.len());
                 for module in modules {
-                    // Пытаемся загрузить скрипты из манифеста
-                    if let Ok(manifest) = serde_json::from_value::<crate::registry::PackageManifest>(module.manifest) {
-                        if let Some(entry) = manifest.entrypoints {
-                            if let Some(hooks_path) = entry.hooks {
-                                let full_path = packages_dir.join(&module.code).join(hooks_path);
-                                if let Err(e) = script_engine.load_module_scripts(&module.code, &full_path).await {
-                                    tracing::error!("Failed to load scripts for module {}: {}", module.code, e);
+                    let module_path = packages_dir.join(&module.code);
+                    let manifest_path = module_path.join("module.toml");
+
+                    if manifest_path.exists() {
+                        if let Ok(content) = std::fs::read_to_string(&manifest_path) {
+                            if let Ok(manifest) =
+                                toml::from_str::<crate::registry::PackageManifest>(&content)
+                            {
+                                // 1. Load embedded frontend routes
+                                if let Some(descriptors) = manifest.frontend_routes {
+                                    let mut routes_guard = routes.write().await;
+                                    for desc in descriptors {
+                                        routes_guard.register(&module.code, desc);
+                                    }
+                                }
+
+                                if let Some(entry) = manifest.entrypoints {
+                                    // 2. Load hooks
+                                    if let Some(hooks_path) = entry.hooks {
+                                        let full_path = module_path.join(hooks_path);
+                                        if let Err(e) = script_engine
+                                            .load_module_scripts(&module.code, &full_path)
+                                            .await
+                                        {
+                                            tracing::error!(
+                                                "Failed to load scripts for module {}: {}",
+                                                module.code,
+                                                e
+                                            );
+                                        }
+                                    }
+
+                                    // 3. Load frontend routes from entrypoints (file)
+                                    if let Some(routes_path) = entry.frontend_routes {
+                                        let full_path = module_path.join(routes_path);
+                                        if let Ok(content) = std::fs::read_to_string(&full_path) {
+                                            if let Ok(descriptors) =
+                                                serde_json::from_str::<Vec<RouteDescriptor>>(
+                                                    &content,
+                                                )
+                                            {
+                                                let mut routes_guard = routes.write().await;
+                                                for desc in descriptors {
+                                                    routes_guard.register(&module.code, desc);
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    // 4. Load admin menu
+                                    if let Some(menu_path) = entry.admin_menu {
+                                        let full_path = module_path.join(menu_path);
+                                        if let Ok(content) = std::fs::read_to_string(&full_path) {
+                                            if let Ok(menu) =
+                                                serde_json::from_str::<AdminMenu>(&content)
+                                            {
+                                                self.admin_menus
+                                                    .write()
+                                                    .await
+                                                    .insert(module.code.clone(), menu);
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }

@@ -6,6 +6,8 @@ use serde::{Deserialize, Serialize};
 pub struct Claims {
     pub admin_id: i32,
     pub exp: usize, // Timestamp окончания жизни токена
+    pub iat: usize, // Timestamp выпуска токена
+    pub jti: String, // Уникальный идентификатор токена (JWT ID)
 }
 
 /// Сервис для работы с JWT
@@ -33,6 +35,7 @@ use axum::{
 };
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use std::sync::Arc;
+use uuid::Uuid;
 
 pub async fn admin_login(
     State(state): State<Arc<AppState>>,
@@ -57,10 +60,12 @@ pub async fn admin_login(
     // 3. Генерируем токен
     let auth_service = AuthService::new(state.jwt_secret.clone());
     // Даем токен на 24 часа
-    let exp = (chrono::Utc::now() + chrono::Duration::hours(24)).timestamp() as usize;
+    let now = chrono::Utc::now();
+    let iat = now.timestamp() as usize;
+    let exp = (now + chrono::Duration::hours(24)).timestamp() as usize;
 
     let token = auth_service
-        .create_token(admin.id, exp)
+        .create_token(admin.id, exp, iat)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     Ok(Json(LoginResponse { token }))
@@ -72,8 +77,19 @@ impl AuthService {
     }
 
     /// Генерация токена для администратора
-    pub fn create_token(&self, admin_id: i32, exp: usize) -> jsonwebtoken::errors::Result<String> {
-        let claims = Claims { admin_id, exp };
+    pub fn create_token(
+        &self,
+        admin_id: i32,
+        exp: usize,
+        iat: usize,
+    ) -> jsonwebtoken::errors::Result<String> {
+        let jti = Uuid::new_v4().to_string();
+        let claims = Claims {
+            admin_id,
+            exp,
+            iat,
+            jti,
+        };
         encode(
             &Header::default(),
             &claims,
@@ -179,7 +195,8 @@ mod tests {
 
         let admin_id = 42;
         // Токен живет до timestamp 10000000000 (далекое будущее)
-        let token_res = auth_service.create_token(admin_id, 10000000000);
+        let now = 1000000000;
+        let token_res = auth_service.create_token(admin_id, 10000000000, now);
         assert!(token_res.is_ok(), "Token should be created successfully");
 
         let token = token_res.unwrap();
@@ -189,6 +206,8 @@ mod tests {
 
         let claims = claims_res.unwrap();
         assert_eq!(claims.admin_id, admin_id);
+        assert_eq!(claims.iat, now);
+        assert!(!claims.jti.is_empty());
     }
 
     #[test]

@@ -3,25 +3,22 @@
 
 <head>
     <meta charset="UTF-8">
-    <title>{{ site_name }} - Danneo 2 (Rust)</title>
+    <title>{% block title %}{{ site_name }} - Danneo 2 (Rust){% endblock %}</title>
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background: #f0f2f5;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            height: 100vh;
             margin: 0;
+            padding: 20px;
         }
 
         .container {
             background: white;
-            padding: 40px;
+            padding: 20px;
             border-radius: 8px;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-            text-align: center;
-            max-width: 500px;
+            max-width: 1000px;
+            margin: 0 auto;
         }
 
         h1 {
@@ -53,11 +50,13 @@
 
 <body>
     <div class="container">
+        {% block content %}
         <h1>Danneo 2.0</h1>
         <p>Добро пожаловать на ваш новый сайт <strong>{{ site_name }}</strong>, работающий на сверхбыстром движке Rust.
         </p>
         <p>Это модернизированная версия легендарной Danneo CMS.</p>
         <a href="/admin/dashboard" class="btn">Перейти в админку (APanel)</a>
+        {% endblock %}
     </div>
 </body>
 

@@ -1,0 +1,14 @@
+{
+    "groups": [
+        {
+            "id": "content",
+            "name": "Управление контентом",
+            "items": [
+                {
+                    "name": "Новости",
+                    "link": "/admin/m/mod_news/list"
+                }
+            ]
+        }
+    ]
+}

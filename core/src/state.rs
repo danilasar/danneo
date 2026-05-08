@@ -3,6 +3,7 @@ use crate::models::core_settings;
 use sea_orm::{DatabaseConnection, EntityTrait};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tera::{Function, Result as TeraResult, Tera, Value};
 
@@ -25,13 +26,14 @@ pub struct AppState {
     pub acl: Arc<AclService>,
     pub packages: Arc<tokio::sync::RwLock<crate::registry::PackageRegistry>>,
     pub modules: Arc<tokio::sync::RwLock<crate::registry::ModuleRegistry>>,
+    pub routes: Arc<tokio::sync::RwLock<crate::registry::RouteRegistry>>,
     pub script_engine: Arc<crate::registry::ScriptEngine>,
 }
 
 impl AppState {
     pub async fn new(db: DatabaseConnection) -> Result<Self, String> {
         let db_arc = Arc::new(db);
-        let script_engine = Arc::new(crate::registry::ScriptEngine::new());
+        let script_engine = Arc::new(crate::registry::ScriptEngine::new(db_arc.clone()));
         // Пытаемся загрузить настройки из БД
         let settings_records = core_settings::Entity::find()
             .all(db_arc.as_ref())
@@ -116,15 +118,72 @@ impl AppState {
         } else {
             "core/blocks"
         };
+
+        // Загружаем шаблоны модулей
+        let m_glob = format!("{}/*/templates/**/*", packages_dir);
+        for entry in glob::glob(&m_glob).map_err(|e| e.to_string())? {
+            if let Ok(path) = entry {
+                if path.is_file() {
+                    if let Ok(rel_path) = path.strip_prefix(packages_dir) {
+                        let parts: Vec<_> = rel_path.components().collect();
+                        if parts.len() >= 4 {
+                            // parts: [Module, "templates", Theme, Template...]
+                            let module = parts[0].as_os_str().to_string_lossy();
+                            let theme = parts[2].as_os_str().to_string_lossy();
+                            let rest: PathBuf = parts[3..].iter().collect();
+                            let name = format!("{}/{}/{}", module, theme, rest.to_string_lossy())
+                                .replace('\\', "/");
+                            tera.add_template_file(path, Some(&name)).map_err(|e| {
+                                format!("Failed to add module template {}: {}", name, e)
+                            })?;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Загружаем шаблоны блоков
+        let b_glob = format!("{}/*/templates/**/*", blocks_dir);
+        for entry in glob::glob(&b_glob).map_err(|e| e.to_string())? {
+            if let Ok(path) = entry {
+                if path.is_file() {
+                    if let Ok(rel_path) = path.strip_prefix(blocks_dir) {
+                        let parts: Vec<_> = rel_path.components().collect();
+                        if parts.len() >= 4 {
+                            // parts: [Block, "templates", Theme, Template...]
+                            let block = parts[0].as_os_str().to_string_lossy();
+                            let theme = parts[2].as_os_str().to_string_lossy();
+                            let rest: PathBuf = parts[3..].iter().collect();
+                            let name = format!("{}/{}/{}", block, theme, rest.to_string_lossy())
+                                .replace('\\', "/");
+                            tera.add_template_file(path, Some(&name)).map_err(|e| {
+                                format!("Failed to add block template {}: {}", name, e)
+                            })?;
+                        }
+                    }
+                }
+            }
+        }
+
         let mut package_registry = crate::registry::PackageRegistry::new(packages_dir, blocks_dir);
         package_registry.scan();
         let packages = Arc::new(tokio::sync::RwLock::new(package_registry));
 
+        let route_registry = crate::registry::RouteRegistry::new();
+        let routes = Arc::new(tokio::sync::RwLock::new(route_registry));
+
         let module_registry = crate::registry::ModuleRegistry::new(db_arc.clone());
-        module_registry.init(script_engine.clone(), std::path::PathBuf::from(packages_dir)).await;
+        module_registry
+            .init(
+                script_engine.clone(),
+                routes.clone(),
+                std::path::PathBuf::from(packages_dir),
+            )
+            .await;
         let modules = Arc::new(tokio::sync::RwLock::new(module_registry));
 
-        let block_registry = crate::registry::BlockRegistry::new(db_arc.clone());
+        let block_registry =
+            crate::registry::BlockRegistry::new(db_arc.clone(), script_engine.clone());
         block_registry.init().await;
         let block_registry = Arc::new(block_registry);
 
@@ -137,6 +196,7 @@ impl AppState {
             acl,
             packages,
             modules,
+            routes,
             script_engine,
         })
     }

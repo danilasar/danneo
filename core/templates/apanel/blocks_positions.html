@@ -20,7 +20,9 @@
             <td class="ac">{{ pos.pposit }}</td>
             <td class="ac">
                 <a href="javascript:void(0)" class="edit-link" data-json='{{ pos | json_encode | safe }}' onclick="edit_position(this)">Изменить</a> |
-                <a href="/admin/blocks/positions/delete?id={{ pos.id }}" onclick="return confirm('Удалить позицию?')">Удалить</a>
+                <form action="/admin/blocks/positions/delete?id={{ pos.id }}" method="POST" style="display:inline;" onsubmit="return confirm('Удалить позицию?')">
+                    <button type="submit" style="background:none; border:none; color:#c00; cursor:pointer; text-decoration:underline; padding:0; font-family:inherit; font-size:inherit;">Удалить</button>
+                </form>
             </td>
         </tr>
         {% endfor %}

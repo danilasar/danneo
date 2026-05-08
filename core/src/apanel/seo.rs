@@ -3,7 +3,7 @@ use axum::{
     Form,
     extract::{Query, State},
     http::StatusCode,
-    response::{Html, IntoResponse, Redirect},
+    response::{IntoResponse, Redirect},
 };
 use sea_orm::{EntityTrait, Set};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
@@ -141,12 +141,13 @@ pub async fn show_settings(
                 .unwrap_or_else(|| module.default_prefix.to_string()),
         })
         .collect::<Vec<_>>();
-    render(&state, "apanel/seo_settings.html", |context| {
-        insert_common(context, &state, "settings");
-        context.insert("seo_settings", &settings);
-        context.insert("modules", &modules);
-    })
-    .await
+
+    let mut context = Context::new();
+    insert_common(&mut context, &state, "settings");
+    context.insert("seo_settings", &settings);
+    context.insert("modules", &modules);
+
+    crate::apanel::render_admin_template(state, "apanel/seo_settings.html", context).await
 }
 
 pub async fn save_settings(
@@ -202,13 +203,13 @@ pub async fn show_sitemap(
     State(state): State<Arc<AppState>>,
 ) -> impl IntoResponse {
     let sitemap = load_sitemap_settings(&state).await;
-    render(&state, "apanel/seo_sitemap.html", |context| {
-        insert_common(context, &state, "sitemap");
-        context.insert("sitemap", &sitemap);
-        context.insert("changefreq", &changefreq_values());
-        context.insert("priorities", &priority_values());
-    })
-    .await
+    let mut context = Context::new();
+    insert_common(&mut context, &state, "sitemap");
+    context.insert("sitemap", &sitemap);
+    context.insert("changefreq", &changefreq_values());
+    context.insert("priorities", &priority_values());
+
+    crate::apanel::render_admin_template(state, "apanel/seo_sitemap.html", context).await
 }
 
 pub async fn save_sitemap(
@@ -277,11 +278,11 @@ pub async fn save_sitemap(
 
 pub async fn show_social(_claims: Claims, State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let social = load_social(&state).await;
-    render(&state, "apanel/seo_social.html", |context| {
-        insert_common(context, &state, "social");
-        context.insert("social", &social);
-    })
-    .await
+    let mut context = Context::new();
+    insert_common(&mut context, &state, "social");
+    context.insert("social", &social);
+
+    crate::apanel::render_admin_template(state, "apanel/seo_social.html", context).await
 }
 
 pub async fn save_social(
@@ -333,25 +334,6 @@ pub async fn delete_social(
         }
     }
     Redirect::to("/admin/seo/social").into_response()
-}
-
-async fn render<F>(state: &AppState, template: &str, fill: F) -> axum::response::Response
-where
-    F: FnOnce(&mut Context),
-{
-    let mut context = Context::new();
-    let settings = state.settings.read().await;
-    context.insert("site_name", &settings.site_name);
-    drop(settings);
-    fill(&mut context);
-
-    match state.tera.render(template, &context) {
-        Ok(html) => Html(html).into_response(),
-        Err(e) => {
-            tracing::error!("Template rendering error in {}: {}", template, e);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
-    }
 }
 
 fn insert_common(context: &mut Context, _state: &AppState, active: &str) {

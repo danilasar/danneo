@@ -1,5 +1,8 @@
-use sea_orm::{DatabaseConnection, DbErr, Statement, ConnectionTrait, ColumnTrait};
-use sea_query::{Alias, ColumnDef, Query, SimpleExpr, Table, TableCreateStatement, PostgresQueryBuilder, MysqlQueryBuilder, SqliteQueryBuilder};
+use sea_orm::{ConnectionTrait, DatabaseConnection, DbErr, Statement};
+use sea_query::{
+    Alias, ColumnDef, Keyword, MysqlQueryBuilder, PostgresQueryBuilder, Query, SimpleExpr,
+    SqliteQueryBuilder, Table, TableCreateStatement,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -32,6 +35,9 @@ fn row_value(row: &sea_orm::QueryResult, col: &str) -> Value {
     if let Ok(Some(value)) = row.try_get::<Option<i64>>("", col) {
         return Value::Number(value.into());
     }
+    if let Ok(Some(value)) = row.try_get::<Option<i32>>("", col) {
+        return Value::Number(value.into());
+    }
     if let Ok(Some(value)) = row.try_get::<Option<f64>>("", col) {
         if let Some(number) = serde_json::Number::from_f64(value) {
             return Value::Number(number);
@@ -42,9 +48,7 @@ fn row_value(row: &sea_orm::QueryResult, col: &str) -> Value {
 
 fn build_create_table(schema: &EntitySchema) -> TableCreateStatement {
     let mut table = Table::create();
-    table
-        .table(Alias::new(&schema.table_name))
-        .if_not_exists();
+    table.table(Alias::new(&schema.table_name)).if_not_exists();
 
     for field in &schema.fields {
         let mut col = ColumnDef::new(Alias::new(&field.name));
@@ -81,14 +85,23 @@ fn build_create_table(schema: &EntitySchema) -> TableCreateStatement {
         if field.unique.unwrap_or(false) {
             col.unique_key();
         }
-        if field.nullable.unwrap_or(true) {
+
+        // Fix: Ensure we don't send both null and not_null or conflict with PK defaults
+        if field.primary_key.unwrap_or(false) {
+            // PK is usually NOT NULL by default in most DBs, but let's be explicit
+            col.not_null();
+        } else if field.nullable.unwrap_or(true) {
             col.null();
         } else {
             col.not_null();
         }
         if let Some(def) = &field.default {
             if let Some(s) = def.as_str() {
-                col.default(s);
+                if s.to_uppercase() == "CURRENT_TIMESTAMP" {
+                    col.default(Keyword::CurrentTimestamp);
+                } else {
+                    col.default(s);
+                }
             } else if let Some(i) = def.as_i64() {
                 col.default(i);
             } else if let Some(b) = def.as_bool() {
@@ -101,10 +114,15 @@ fn build_create_table(schema: &EntitySchema) -> TableCreateStatement {
 }
 
 /// Create a table from `EntitySchema` using sea_query. Works with any backend.
-pub async fn create_entity_table(db: &DatabaseConnection, schema: &EntitySchema) -> Result<(), DbErr> {
+pub async fn create_entity_table(
+    db: &DatabaseConnection,
+    schema: &EntitySchema,
+) -> Result<(), DbErr> {
     let backend = db.get_database_backend();
     let stmt = match backend {
-        sea_orm::DatabaseBackend::Postgres => build_create_table(schema).build(PostgresQueryBuilder),
+        sea_orm::DatabaseBackend::Postgres => {
+            build_create_table(schema).build(PostgresQueryBuilder)
+        }
         sea_orm::DatabaseBackend::MySql => build_create_table(schema).build(MysqlQueryBuilder),
         sea_orm::DatabaseBackend::Sqlite => build_create_table(schema).build(SqliteQueryBuilder),
     };
@@ -129,12 +147,17 @@ pub async fn drop_entity_table(db: &DatabaseConnection, table_name: &str) -> Res
             .if_exists()
             .build(SqliteQueryBuilder),
     };
-    db.execute(Statement::from_string(db.get_database_backend(), stmt)).await?;
+    db.execute(Statement::from_string(db.get_database_backend(), stmt))
+        .await?;
     Ok(())
 }
 
 /// Insert a record; returns the data back as confirmation.
-pub async fn insert_record(db: &DatabaseConnection, table: &str, data: &Value) -> Result<Value, DbErr> {
+pub async fn insert_record(
+    db: &DatabaseConnection,
+    table: &str,
+    data: &Value,
+) -> Result<Value, DbErr> {
     let backend = db.get_database_backend();
     let mut query = Query::insert();
     query.into_table(Alias::new(table));
@@ -146,7 +169,11 @@ pub async fn insert_record(db: &DatabaseConnection, table: &str, data: &Value) -
             let expr = match v {
                 Value::String(s) => SimpleExpr::Value(s.clone().into()),
                 Value::Number(n) => {
-                    if let Some(i) = n.as_i64() { SimpleExpr::Value(i.into()) } else { SimpleExpr::Value(n.as_f64().unwrap().into()) }
+                    if let Some(i) = n.as_i64() {
+                        SimpleExpr::Value(i.into())
+                    } else {
+                        SimpleExpr::Value(n.as_f64().unwrap().into())
+                    }
                 }
                 Value::Bool(b) => SimpleExpr::Value((*b).into()),
                 Value::Null => SimpleExpr::Value(sea_orm::Value::Int(None).into()),
@@ -161,12 +188,17 @@ pub async fn insert_record(db: &DatabaseConnection, table: &str, data: &Value) -
         sea_orm::DatabaseBackend::MySql => query.build(MysqlQueryBuilder),
         sea_orm::DatabaseBackend::Sqlite => query.build(SqliteQueryBuilder),
     };
-    db.execute(Statement::from_sql_and_values(backend, &sql, values)).await?;
+    db.execute(Statement::from_sql_and_values(backend, &sql, values))
+        .await?;
     Ok(data.clone())
 }
 
 /// Return all rows from a dynamic table as JSON objects.
-pub async fn select_all(db: &DatabaseConnection, table: &str, columns: &[String]) -> Result<Vec<Value>, DbErr> {
+pub async fn select_all(
+    db: &DatabaseConnection,
+    table: &str,
+    columns: &[String],
+) -> Result<Vec<Value>, DbErr> {
     let backend = db.get_database_backend();
     let mut query = Query::select();
     query.from(Alias::new(table)).column(sea_query::Asterisk);
@@ -175,8 +207,10 @@ pub async fn select_all(db: &DatabaseConnection, table: &str, columns: &[String]
         sea_orm::DatabaseBackend::MySql => query.build(MysqlQueryBuilder),
         sea_orm::DatabaseBackend::Sqlite => query.build(SqliteQueryBuilder),
     };
-    let rows = db.query_all(Statement::from_sql_and_values(backend, &sql, values)).await?;
-    
+    let rows = db
+        .query_all(Statement::from_sql_and_values(backend, &sql, values))
+        .await?;
+
     let mut results = Vec::new();
     for row in rows {
         let mut map = serde_json::Map::new();
@@ -189,20 +223,29 @@ pub async fn select_all(db: &DatabaseConnection, table: &str, columns: &[String]
 }
 
 /// Select a single record by primary key.
-pub async fn select_by_pk(db: &DatabaseConnection, table: &str, columns: &[String], pk_col: &str, pk_val: &str) -> Result<Option<Value>, DbErr> {
+pub async fn select_by_pk(
+    db: &DatabaseConnection,
+    table: &str,
+    columns: &[String],
+    pk_col: &str,
+    pk_val: &str,
+) -> Result<Option<Value>, DbErr> {
     let backend = db.get_database_backend();
     let mut query = Query::select();
-    query.from(Alias::new(table))
+    query
+        .from(Alias::new(table))
         .column(sea_query::Asterisk)
         .and_where(sea_query::Expr::col(Alias::new(pk_col)).eq(pk_val));
-    
+
     let (sql, values) = match backend {
         sea_orm::DatabaseBackend::Postgres => query.build(PostgresQueryBuilder),
         sea_orm::DatabaseBackend::MySql => query.build(MysqlQueryBuilder),
         sea_orm::DatabaseBackend::Sqlite => query.build(SqliteQueryBuilder),
     };
-    let row = db.query_one(Statement::from_sql_and_values(backend, &sql, values)).await?;
-    
+    let row = db
+        .query_one(Statement::from_sql_and_values(backend, &sql, values))
+        .await?;
+
     if let Some(row) = row {
         let mut map = serde_json::Map::new();
         for col in columns {
@@ -215,19 +258,32 @@ pub async fn select_by_pk(db: &DatabaseConnection, table: &str, columns: &[Strin
 }
 
 /// Update a record by primary key.
-pub async fn update_record(db: &DatabaseConnection, table: &str, pk_col: &str, pk_val: &str, data: &Value) -> Result<Value, DbErr> {
+pub async fn update_record(
+    db: &DatabaseConnection,
+    table: &str,
+    pk_col: &str,
+    pk_val: &str,
+    data: &Value,
+) -> Result<Value, DbErr> {
     let backend = db.get_database_backend();
     let mut query = Query::update();
-    query.table(Alias::new(table))
+    query
+        .table(Alias::new(table))
         .and_where(sea_query::Expr::col(Alias::new(pk_col)).eq(pk_val));
 
     if let Some(obj) = data.as_object() {
         for (k, v) in obj {
-            if k == pk_col { continue; } // Don't update PK
+            if k == pk_col {
+                continue;
+            } // Don't update PK
             let expr = match v {
                 Value::String(s) => SimpleExpr::Value(s.clone().into()),
                 Value::Number(n) => {
-                    if let Some(i) = n.as_i64() { SimpleExpr::Value(i.into()) } else { SimpleExpr::Value(n.as_f64().unwrap().into()) }
+                    if let Some(i) = n.as_i64() {
+                        SimpleExpr::Value(i.into())
+                    } else {
+                        SimpleExpr::Value(n.as_f64().unwrap().into())
+                    }
                 }
                 Value::Bool(b) => SimpleExpr::Value((*b).into()),
                 Value::Null => SimpleExpr::Value(sea_orm::Value::Int(None).into()),
@@ -242,15 +298,22 @@ pub async fn update_record(db: &DatabaseConnection, table: &str, pk_col: &str, p
         sea_orm::DatabaseBackend::MySql => query.build(MysqlQueryBuilder),
         sea_orm::DatabaseBackend::Sqlite => query.build(SqliteQueryBuilder),
     };
-    db.execute(Statement::from_sql_and_values(backend, &sql, values)).await?;
+    db.execute(Statement::from_sql_and_values(backend, &sql, values))
+        .await?;
     Ok(data.clone())
 }
 
 /// Delete a record by primary key.
-pub async fn delete_record(db: &DatabaseConnection, table: &str, pk_col: &str, pk_val: &str) -> Result<(), DbErr> {
+pub async fn delete_record(
+    db: &DatabaseConnection,
+    table: &str,
+    pk_col: &str,
+    pk_val: &str,
+) -> Result<(), DbErr> {
     let backend = db.get_database_backend();
     let mut query = Query::delete();
-    query.from_table(Alias::new(table))
+    query
+        .from_table(Alias::new(table))
         .and_where(sea_query::Expr::col(Alias::new(pk_col)).eq(pk_val));
 
     let (sql, values) = match backend {
@@ -258,7 +321,8 @@ pub async fn delete_record(db: &DatabaseConnection, table: &str, pk_col: &str, p
         sea_orm::DatabaseBackend::MySql => query.build(MysqlQueryBuilder),
         sea_orm::DatabaseBackend::Sqlite => query.build(SqliteQueryBuilder),
     };
-    db.execute(Statement::from_sql_and_values(backend, &sql, values)).await?;
+    db.execute(Statement::from_sql_and_values(backend, &sql, values))
+        .await?;
     Ok(())
 }
 

@@ -72,7 +72,30 @@
                                 <a class="interface" href="#">{{ t(key='admin_list') }}</a>
                                 <a class="interface" href="#">{{ t(key='admin_add') }}</a>
                             </div>
+
+                            {% for group in module_menus %}
+                                {% if group.id == 'content' %}
+                                    <div class="mcont" style="display:block">
+                                        {% for item in group.items %}
+                                            <a class="interface" href="{{ item.link }}">{{ item.name }}</a>
+                                        {% endfor %}
+                                    </div>
+                                {% endif %}
+                            {% endfor %}
                         </div>
+
+                        {% for group in module_menus %}
+                            {% if group.id != 'content' %}
+                                <div class="menupanelin">{{ group.name }}</div>
+                                <div class="menu-{{ group.id }}">
+                                    <div class="mcont" style="display:block">
+                                        {% for item in group.items %}
+                                            <a class="interface" href="{{ item.link }}">{{ item.name }}</a>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                            {% endif %}
+                        {% endfor %}
 
                         <div class="menupanelin">{{ t(key='admin_system') }}</div>
                         <div class="menu-system">

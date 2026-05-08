@@ -1,0 +1,15 @@
+[package]
+id = "mod_hello"
+type = "module"
+version = "1.0.0"
+name = "Hello World Module"
+description = "A simple demonstration module"
+author = "Gemini CLI"
+
+[module]
+runtime_type = "declarative"
+
+[entrypoints]
+entities = "entities/greeting.json"
+admin_menu = "admin_menu.json"
+frontend_routes = "routes/frontend.json"

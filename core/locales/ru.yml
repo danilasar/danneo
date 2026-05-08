@@ -34,3 +34,6 @@ admin_success_save: "Изменения успешно сохранены"
 admin_error_save: "Ошибка при сохранении изменений"
 admin_error: "Ошибка"
 admin_toggle_menu: "Открыть/Закрыть"
+hello_from_block: "Приветствие из модуля (Блок)"
+hello_from_module: "Список приветствий"
+

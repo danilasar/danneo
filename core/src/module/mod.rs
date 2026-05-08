@@ -3,6 +3,8 @@ use async_trait::async_trait;
 use axum::Router;
 use std::sync::Arc;
 
+pub mod native_demo;
+
 /// Базовый трейт, который должен реализовать каждый модуль Danneo.
 /// Он определяет жизненный цикл и интеграцию модуля в систему.
 #[async_trait]

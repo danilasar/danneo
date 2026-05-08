@@ -1,0 +1,8 @@
+<div class="hello-block">
+    <h4>{{ t(key='hello_from_block') }}</h4>
+    <ul>
+    {% for item in items %}
+        <li>{{ item.message }}</li>
+    {% endfor %}
+    </ul>
+</div>

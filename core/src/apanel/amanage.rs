@@ -2,7 +2,7 @@ use crate::{auth::Claims, models::core_admin_groups, models::core_admins, state:
 use axum::{
     extract::{Form, State},
     http::StatusCode,
-    response::{Html, IntoResponse, Redirect},
+    response::{IntoResponse, Redirect},
 };
 use sea_orm::{ActiveModelTrait, EntityTrait, QueryOrder, Set};
 use serde::Deserialize;
@@ -39,17 +39,9 @@ pub async fn list_admins(_claims: Claims, State(state): State<Arc<AppState>>) ->
     };
 
     let mut context = Context::new();
-    let settings = state.settings.read().await;
-    context.insert("site_name", &settings.site_name);
     context.insert("admins", &admins);
 
-    match state.tera.render("apanel/amanage_list.html", &context) {
-        Ok(html) => Html(html).into_response(),
-        Err(e) => {
-            tracing::error!("Template rendering error: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
-    }
+    crate::apanel::render_admin_template(state, "apanel/amanage_list.html", context).await
 }
 
 pub async fn edit_admin(
@@ -75,18 +67,10 @@ pub async fn edit_admin(
         .unwrap_or_default();
 
     let mut context = Context::new();
-    let settings = state.settings.read().await;
-    context.insert("site_name", &settings.site_name);
     context.insert("admin", &admin);
     context.insert("groups", &groups);
 
-    match state.tera.render("apanel/amanage_edit.html", &context) {
-        Ok(html) => Html(html).into_response(),
-        Err(e) => {
-            tracing::error!("Template rendering error: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
-    }
+    crate::apanel::render_admin_template(state, "apanel/amanage_edit.html", context).await
 }
 
 pub async fn save_admin(

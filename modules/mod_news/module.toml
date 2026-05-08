@@ -1,0 +1,28 @@
+[package]
+id = "mod_news"
+name = "News Module"
+version = "1.0.0"
+description = "Full featured news module with categories and articles"
+type = "module"
+
+[module]
+runtime_type = "script"
+
+[entrypoints]
+hooks = "scripts/hooks.lua"
+admin_menu = "admin_menu.json"
+
+[[frontend_routes]]
+name = "news_list"
+method = "GET"
+path = "/news"
+handler = "script"
+
+[[frontend_routes]]
+name = "news_view"
+method = "GET"
+path = "/news/:id"
+handler = "script"
+
+[install]
+default_enabled = true

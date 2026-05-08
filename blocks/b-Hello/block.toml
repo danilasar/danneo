@@ -1,0 +1,13 @@
+[block]
+id = "b-Hello"
+module = "mod_hello"
+name = "Приветствие из модуля"
+version = "1.0.0"
+template = "templates/block.html"
+renderer = "declarative"
+
+[[setting]]
+key = "limit"
+type = "integer"
+default = 3
+label = "Лимит записей"

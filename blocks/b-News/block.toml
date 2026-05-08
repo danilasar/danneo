@@ -2,7 +2,7 @@
 id = "b-News"
 name = "Последние новости"
 version = "1.0.0"
-template = "template.html"
+template = "templates/block.html"
 renderer = "declarative"
 
 [[setting]]

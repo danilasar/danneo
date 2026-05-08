@@ -1,0 +1,38 @@
+{% extends "apanel/base.html" %}
+{% block content %}
+<div class="section">
+    <form action="/admin/m/mod_news/save" method="POST">
+        <table class="work">
+            <caption>Добавление новости</caption>
+            <tr>
+                <td class="al" style="width:200px;">Категория</td>
+                <td class="al">
+                    <select name="cat_id" style="width:400px;">
+                        {% for cat in categories %}
+                            <option value="{{ cat.id }}">{{ cat.title }}</option>
+                        {% endfor %}
+                    </select>
+                </td>
+            </tr>
+            <tr>
+                <td class="al">Заголовок</td>
+                <td class="al">
+                    <input type="text" name="title" style="width:400px;" required>
+                </td>
+            </tr>
+            <tr>
+                <td class="al">Текст новости</td>
+                <td class="al">
+                    <textarea name="content" style="width:100%; height:300px;" required></textarea>
+                </td>
+            </tr>
+            <tr>
+                <td class="ac" colspan="2" style="padding:15px;">
+                    <input type="submit" value="Сохранить" class="interface">
+                    <a href="/admin/m/mod_news/list" class="interface" style="margin-left:10px;">Отмена</a>
+                </td>
+            </tr>
+        </table>
+    </form>
+</div>
+{% endblock %}

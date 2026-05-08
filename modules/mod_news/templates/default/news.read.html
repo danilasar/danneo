@@ -1,0 +1,17 @@
+{% extends "index.html" %}
+{% block content %}
+<div class="news-view">
+    <div style="margin-bottom: 20px;">
+        <a href="/news">« Назад к списку</a>
+    </div>
+    <article>
+        <h1>{{ news.title }}</h1>
+        <div class="news-meta" style="color: #888; margin-bottom: 20px; border-bottom: 1px solid #eee; padding-bottom: 10px;">
+            Дата публикации: {{ news.created_at }}
+        </div>
+        <div class="news-content" style="line-height: 1.8; font-size: 1.1em;">
+            {{ news.content | safe | linebreaksbr }}
+        </div>
+    </article>
+</div>
+{% endblock %}

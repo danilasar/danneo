@@ -1,0 +1,21 @@
+{% extends "frontend/Soft/index.html" %}
+
+{% block content %}
+<div class="cont">
+    <div class="conttitle">
+        <h1>{{ news.title }}</h1>
+    </div>
+    <div class="conttext">
+        {% if news.thumbs %}
+            {% for thumb in news.thumbs %}
+                <div class="{{ thumb.float | default(value='left') }}"><img src="{{ site_url }}{{ thumb.src }}" alt="" /></div>
+            {% endfor %}
+        {% endif %}
+        {{ news.content | safe }}
+        <div class="clear"></div>
+    </div>
+    <div class="continfo">
+        {{ news.created_at }} <i>&#8260;</i> Просмотров: {{ news.hits | default(value=0) }}
+    </div>
+</div>
+{% endblock %}

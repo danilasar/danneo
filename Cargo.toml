@@ -1,34 +1,55 @@
 [workspace]
 resolver = "2"
-members = [
-    "core", "migration",
-]
+members = ["core", "migration"]
 
 [workspace.dependencies]
-axum = "0.7"
+axum = { version = "0.7.9", features = ["multipart"] }
 tokio = { version = "1.0", features = ["full"] }
-tower-http = { version = "0.5", features = ["fs"] }
-sea-orm = { version = "1.0", features = ["sqlx-postgres", "sqlx-sqlite", "runtime-tokio-rustls", "macros"] }
-sea-orm-migration = { version = "1.0", features = ["sqlx-postgres", "runtime-tokio-rustls", "with-json"] }
+tower-http = { version = "0.6.10", features = ["fs"] }
+sea-orm = { version = "1.0", features = [
+    "sqlx-postgres",
+    "sqlx-sqlite",
+    "runtime-tokio-rustls",
+    "macros",
+] }
+sea-orm-migration = { version = "1.0", features = [
+    "sqlx-postgres",
+    "runtime-tokio-rustls",
+    "with-json",
+] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 tera = "1.19"
 async-trait = "0.1"
-bcrypt = "0.15"
+bcrypt = "0.19.1"
 chrono = "0.4"
 dotenvy = "0.15"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-jsonwebtoken = "9.3"
-tower = { version = "0.4", features = ["util"] }
+jsonwebtoken = { version = "10.3.0", features = ["rust_crypto"] }
+tower = { version = "0.5.3", features = ["util"] }
 casbin = "2.3"
 sea-orm-adapter = "0.4"
+mlua = { version = "0.11.6", features = [
+    "lua54",
+    "vendored",
+    "async",
+    "send",
+    "serialize",
+] }
 tempfile = "3.10"
-rust-i18n = "3.0"
+rust-i18n = "4.0.0"
 slug = "0.1"
-toml = "0.8"
-thiserror = "1.0"
+toml = "1.1.2"
+thiserror = "2.0.18"
+zip = "8.6.0"
+log = "0.4.29"
+
+uuid = { version = "1.0", features = ["v4"] }
 # Casbin depends on crates.io Rhai with restrictive features (`no_function`,
-# `no_module`, `only_i32`, ...). Keep the module scripting runtime on a
-# separate package source so Cargo does not unify those features into it.
-script-rhai = { package = "rhai", git = "https://github.com/rhaiscript/rhai", branch = "main", features = ["serde", "sync"] }
+# `no_module`, `only_i32`, ...). Keep this legacy Rhai alias separate while
+# ScriptEngine callers still exchange `script_rhai::Dynamic` at the boundary.
+script-rhai = { package = "rhai", git = "https://github.com/rhaiscript/rhai", tag = "v1.24.0", version = "1.24.0", features = [
+    "serde",
+    "sync",
+] }

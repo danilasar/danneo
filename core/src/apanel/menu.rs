@@ -40,8 +40,7 @@ pub async fn list_groups(_claims: Claims, State(state): State<Arc<AppState>>) ->
     };
 
     let mut context = Context::new();
-    let settings = state.settings.read().await;
-    context.insert("site_name", &settings.site_name);
+    crate::apanel::prepare_admin_context(state.clone(), &mut context).await;
     context.insert("groups", &groups);
 
     match state.tera.render("apanel/menu_list.html", &context) {
@@ -109,8 +108,7 @@ pub async fn list_items(
     };
 
     let mut context = Context::new();
-    let settings = state.settings.read().await;
-    context.insert("site_name", &settings.site_name);
+    crate::apanel::prepare_admin_context(state.clone(), &mut context).await;
     context.insert("group", &group);
     context.insert("items", &items);
 
@@ -242,7 +240,7 @@ mod tests {
             .with_state(state);
 
         let auth_service = AuthService::new(jwt_secret);
-        let token = auth_service.create_token(1, 9999999999).unwrap();
+        let token = auth_service.create_token(1, 9999999999, 1000000000).unwrap();
 
         let response = app
             .oneshot(
@@ -269,7 +267,7 @@ mod tests {
             .with_state(state);
 
         let auth_service = AuthService::new(jwt_secret);
-        let token = auth_service.create_token(1, 9999999999).unwrap();
+        let token = auth_service.create_token(1, 9999999999, 1000000000).unwrap();
 
         let response = app
             .oneshot(
