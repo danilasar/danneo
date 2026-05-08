@@ -47,6 +47,16 @@ impl MigrationTrait for Migration {
             )
             .await?;
 
+        // Вставляем дефолтного админа: admin / password
+        let password_hash = bcrypt::hash("password", 4).unwrap();
+        let insert_admin = Query::insert()
+            .into_table(CoreAdmins::Table)
+            .columns([CoreAdmins::Login, CoreAdmins::PasswordHash])
+            .values_panic(["admin".into(), password_hash.into()])
+            .to_owned();
+
+        manager.exec_stmt(insert_admin).await?;
+
         Ok(())
     }
 
@@ -58,16 +68,6 @@ impl MigrationTrait for Migration {
         manager
             .drop_table(Table::drop().table(CoreAdmins::Table).to_owned())
             .await?;
-
-        // Вставляем дефолтного админа: admin / password
-        let password_hash = bcrypt::hash("password", 4).unwrap();
-        let insert_admin = Query::insert()
-            .into_table(CoreAdmins::Table)
-            .columns([CoreAdmins::Login, CoreAdmins::PasswordHash])
-            .values_panic(["admin".into(), password_hash.into()])
-            .to_owned();
-
-        manager.exec_stmt(insert_admin).await?;
 
         Ok(())
     }

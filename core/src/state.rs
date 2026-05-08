@@ -1,27 +1,33 @@
 use crate::models::core_settings;
+use crate::blocks::BlockManager;
 use sea_orm::{DatabaseConnection, EntityTrait};
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]
 pub struct GlobalSettings {
     pub site_name: String,
     pub admin_email: String,
+    pub site_url: String,
+    pub site_temp: String,
 }
 
 /// Глобальное состояние приложения (Ядра).
 /// Доступно каждому роуту и каждому модулю.
 pub struct AppState {
-    pub db: DatabaseConnection,
-    pub settings: GlobalSettings,
-    pub tera: std::sync::Arc<tera::Tera>,
+    pub db: Arc<DatabaseConnection>,
+    pub settings: Arc<tokio::sync::RwLock<GlobalSettings>>,
+    pub tera: Arc<tera::Tera>,
+    pub block_manager: Arc<BlockManager>,
     pub jwt_secret: String,
 }
 
 impl AppState {
     pub async fn new(db: DatabaseConnection) -> Result<Self, String> {
+        let db = Arc::new(db);
         // Пытаемся загрузить настройки из БД
         let settings_records = core_settings::Entity::find()
-            .all(&db)
+            .all(db.as_ref())
             .await
             .map_err(|e| format!("Failed to load settings: {}", e))?;
 
@@ -38,20 +44,43 @@ impl AppState {
                         settings.admin_email = val.to_string();
                     }
                 }
+                "site_url" => {
+                    if let Some(val) = record.value.as_str() {
+                        settings.site_url = val.to_string();
+                    }
+                }
+                "site_temp" => {
+                    if let Some(val) = record.value.as_str() {
+                        settings.site_temp = val.to_string();
+                    }
+                }
                 _ => {}
             }
         }
+        let settings = Arc::new(tokio::sync::RwLock::new(settings));
 
         let jwt_secret = std::env::var("JWT_SECRET").unwrap_or_else(|_| "super_secret_key".to_string());
+        
+        let mut block_manager = BlockManager::new();
+        // Регистрируем тестовый блок
+        block_manager.register(Box::new(crate::blocks::SampleBlock));
+        let block_manager = Arc::new(block_manager);
 
         // Инициализируем Tera, загружая шаблоны из файловой системы
-        let tera = tera::Tera::new("core/templates/**/*")
+        let template_path = if std::path::Path::new("core/templates").exists() {
+            "core/templates/**/*"
+        } else {
+            "templates/**/*"
+        };
+        
+        let tera = tera::Tera::new(template_path)
             .map_err(|e| format!("Failed to initialize Tera: {}", e))?;
 
         Ok(Self { 
             db, 
             settings,
-            tera: std::sync::Arc::new(tera),
+            tera: Arc::new(tera),
+            block_manager,
             jwt_secret,
         })
     }
@@ -76,6 +105,14 @@ mod tests {
                         key: "admin_email".to_string(),
                         value: serde_json::json!("admin@test.com"),
                     },
+                    core_settings::Model {
+                        key: "site_url".to_string(),
+                        value: serde_json::json!("http://localhost"),
+                    },
+                    core_settings::Model {
+                        key: "site_temp".to_string(),
+                        value: serde_json::json!("Soft"),
+                    },
                 ]
             ])
             .into_connection();
@@ -85,7 +122,8 @@ mod tests {
         assert!(state_result.is_ok(), "AppState should initialize successfully");
         
         let state = state_result.unwrap();
-        assert_eq!(state.settings.site_name, "Test Site");
-        assert_eq!(state.settings.admin_email, "admin@test.com");
+        let settings = state.settings.read().await;
+        assert_eq!(settings.site_name, "Test Site");
+        assert_eq!(settings.admin_email, "admin@test.com");
     }
 }

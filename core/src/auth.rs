@@ -41,7 +41,7 @@ pub async fn admin_login(
     // 1. Ищем админа по логину
     let admin = core_admins::Entity::find()
         .filter(core_admins::Column::Login.eq(&payload.login))
-        .one(&state.db)
+        .one(state.db.as_ref())
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
@@ -98,8 +98,9 @@ use axum::{
 pub async fn show_login_page(
     State(state): State<Arc<AppState>>,
 ) -> impl IntoResponse {
+    let settings = state.settings.read().await;
     let mut context = tera::Context::new();
-    context.insert("site_name", &state.settings.site_name);
+    context.insert("site_name", &settings.site_name);
     
     match state.tera.render("apanel/login.html", &context) {
         Ok(html) => axum::response::Html(html),

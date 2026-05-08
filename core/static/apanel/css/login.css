@@ -1,6 +1,6 @@
 * {
-	margin: 0;
-	padding: 0;
+	margin: 0px;
+	padding: 0px;
 	font-size: 1em;
 	text-decoration: none;
 	border: none;
@@ -9,39 +9,26 @@
 }
 
 html { 
-	background: #004671 url(../images/bg.png) repeat;
+	background: #f9f9f9;
 	position: absolute;
 	top: 45%;
 	left: 50%;   
 }
 
-body {
-	color: #333;
+body {      
+	background: #dddddd;
 	font: 12px/20px "Helvetica Neue", Arial, sans-serif;
-	
-	-webkit-text-shadow: #fff 0 1px 0; 
-	 -khtml-text-shadow: #fff 0 1px 0;
-	   -moz-text-shadow: #fff 0 1px 0;
-	        text-shadow: #fff 0 1px 0;
-	        
+	color: #333333;
 	position: absolute;
-	top: 45%;
+	top: 46%;
 	left: 50%;
-	margin: -150px 0 0 -235px;
-	width: 450px;
-	padding: 10px;
-	background: #004671; 
-          
-	-webkit-border: 1px solid #069; 
-	 -khtml-border: 1px solid #069;
-	   -moz-border: 1px solid #069;
-	        border: 1px solid #069;  
-	        
-	-webkit-box-shadow: rgba(0,34,51,0.9) 1px 1px 12px; 
-	 -khtml-box-shadow: rgba(0,34,51,0.9) 1px 1px 12px;
-	   -moz-box-shadow: rgba(0,34,51,0.9) 1px 1px 12px;
-	     -o-box-shadow: rgba(0,34,51,0.9) 1px 1px 12px;
-	        box-shadow: rgba(0,34,51,0.9) 1px 1px 12px;  
+	margin: -120px 0 0 -235px;
+	width: 450px;  
+	
+	-webkit-text-shadow: #ffffff 0 1px 0; 
+	 -khtml-text-shadow: #ffffff 0 1px 0;
+	   -moz-text-shadow: #ffffff 0 1px 0;
+	        text-shadow: #ffffff 0 1px 0;
 	        
 	-webkit-animation-name: pop;
 	-webkit-animation-duration: .5s;
@@ -88,86 +75,89 @@ body {
 	to   { transform: scale(1); }
 }
 
-body > div { 
-        background: #f2f7fa url(../images/bg.gif);
-	margin: 0; 
-        padding: 50px 60px 76px; 
-	border: 3px solid #9bd;
+div { 
+        background: #dddddd;  
+	margin: 0px; 
+        padding: 30px 60px 60px; 
+        border-top: 1px solid #f9f9f9;  
+        border-bottom: 1px solid #bbbbbb; 
         -webkit-text-shadow: 1px 1px 1px #dde5ee; 
          -khtml-text-shadow: 1px 1px 1px #dde5ee;
            -moz-text-shadow: 1px 1px 1px #dde5ee;
-                text-shadow: 1px 1px 1px #dde5ee; 
-        -webkit-box-shadow: inset rgba(255,255,255,0.9) 0px 0px 0px 1px; 
-         -khtml-box-shadow: inset rgba(255,255,255,0.9) 0px 0px 0px 1px;
-           -moz-box-shadow: inset rgba(255,255,255,0.9) 0px 0px 0px 1px;
-	        box-shadow: inset rgba(255,255,255,0.9) 0px 0px 0px 1px;
+                text-shadow: 1px 1px 1px #f9f9f9;  
 }
 
-div > h1 {   
+h1 {   
+        background: #2767a8;                   
+        background: -webkit-gradient(linear, 0% 0, 0% 100%, from(#3180d0), to(#1d4d7e));  
+	background: -moz-linear-gradient(0% 100% 90deg, #1d4d7e, #3180d0);
+        background: -o-linear-gradient(top, #3180d0, #1d4d7e);
+        background: -ms-linear-gradient(top, #3180d0, #1d4d7e);
+        background: linear-gradient(top, #3180d0, #1d4d7e);  
+        filter: progid:DXImageTransform.Microsoft.gradient(startColorstr='#3180D0', endColorstr='#1D4D7E'); 	
+	
         display: block;  
         color: #ffffff;  
-        font-size: 25px;
+        font-size: 20px;  
 	position: absolute;
-	top: -69px;
-	left: 18px; 
+	top: -46px;
+	left: 0px; 
 	width: 450px; 
-	height: 90px; 
-	line-height: 90px; 
+	height: 41px; 
+	line-height: 43px; 
         z-index: -999; 
         font-weight: normal;
-	text-indent: 9px;     
-        -webkit-text-shadow: 1px 1px 1px #012; 
-         -khtml-text-shadow: 1px 1px 1px #012;
-           -moz-text-shadow: 1px 1px 1px #012;
-                text-shadow: 1px 1px 1px #012;
+	text-indent: 18px; 
+        border-bottom: 5px solid #ff9900;    
+        -webkit-text-shadow: 1px 1px 1px #184069; 
+         -khtml-text-shadow: 1px 1px 1px #184069;
+           -moz-text-shadow: 1px 1px 1px #184069;
+                text-shadow: 1px 1px 1px #184069; 
 }    
 
-div > h1 > strong {    
-        color: #b90000; 
-        font-weight: normal; 
-}
-
-body > strong {        
+strong {        
         display: block; 
-        color: #4d8ec7;
+        background: #dcdcdc;
+        color: #666666;
         font-size: 11px; 
         font-weight: normal; 
         text-align: center;
 	position: absolute;
-	bottom: -30px;
-	left: 10px;  
+	bottom: -25px;
+	left: 0px;  
 	width: 450px; 
-        -webkit-text-shadow: 1px 1px 0px #012; 
-         -khtml-text-shadow: 1px 1px 0px #012;
-           -moz-text-shadow: 1px 1px 0px #012;
-	        text-shadow: 1px 1px 0px #012;
+	padding: 2px 0px;
+        -webkit-text-shadow: 0px 1px 0px #ffffff; 
+         -khtml-text-shadow: 0px 1px 0px #ffffff;
+           -moz-text-shadow: 0px 1px 0px #ffffff;
+	        text-shadow: 0px 1px 0px #ffffff; 
 } 
-body > strong i { 
-	color: #b90000; 
-	font-style: normal; 
-}  
-body > strong a { 
-	color: #4d8ec7; 
+strong i { 
+	color: #666666; 
 	font-style: normal;
 }  
-body > strong a:hover { 
-	color: #ffffff; 
+strong a { 
+	color: #666666; 
+	font-style: normal;
+} 
+strong a:hover { 
+	color: #000000; 
 }
-div > p { 
-	color: #000; 
+div p { 
+	color: #b73443; 
 	text-align: center;
 	text-shadow: none;
 	margin-bottom: -18px;
 }
  
-div > p > span { 
-	color: #c00; 
+div p span { 
+	color: #b73443; 
         font-weight: bold;
         display: block; 
 }
  
-div > cite { 
-	color: #e40; 
+div cite { 
+	color: #b00; 
         font-style: normal; 
 	text-shadow: none;
 	text-align: left;
@@ -175,16 +165,16 @@ div > cite {
         display: block; 
         clear: both;   
 	position: relative;
-	top: 55px;
-	left: 0px;  
+	top: 49px;
+	left: 0px; 
 	width: 335px;
 	padding: 6px 0 0;
-	margin-bottom: 8px; 
-        border-top: 1px dotted #9ea9b6;
+	margin-bottom: 10px; 
+        border-top: 1px dashed #aeaeae;  
         animation-name: auth;
         animation-duration: .5s;
         animation-iteration-count: 1;
-        animation-timing-function: ease-in; 
+        animation-timing-function: ease-in;   
 }
 @keyframes auth {
 	from { transition: scale(.1); opacity: 0; }
@@ -193,28 +183,28 @@ div > cite {
 }
  
 form { 
-	margin: 0; 
+	margin: 0px; 
         display: inline; 
 } 
 *:focus   { outline: none; }
 input, a  { outline: expression(hideFocus = 'true'); outline: none; }
 
 input { 
-        background: #fff;
-        color: #607690; 
+        background: #ffffff;
+        color: #666666; 
         font-size: 1.1em;
         display: inline-block; 
         width: 200px;   
         height: 17px; 
         line-height: 14px;
         padding: 1px 5px 2px; 
-        margin: 0 0 7px; 
-        border: 1px solid #93a1af; 
+        margin: 0px 0px 5px; 
+        border: 1px solid #838383; 
         clear: both; 
 }
 input:focus  { 
-       color: #000; 
-       border: 1px solid #607690; 
+        color: #000000; 
+        border: 1px solid #838383; 
 }
 label { 
         width: 100px; 
@@ -223,33 +213,79 @@ label {
  
 /* Buton Forms */
 .blogin {
-        background: #005687;
-        font: 1em/1.4 Verdana, Arial, Sans-serif; 
-        color: #ffffff;
-        display: inline-block;   
+        color: #333333 !important; 
+        display: block;   
 	position: absolute;
-	top: 121px;
-	right: 82px; 
-        width: 110px; 
-        height: 26px; 
-        line-height: 14px;
-        padding: 1px 5px 3px; 
-        margin: 0;  
-        overflow: visible; 
-        border: 1px solid #00466e;   
+	top: 91px;
+	right: 75px; 
+        width: 100px;
+	font-family: inherit;  
+	height: 27px;
+	line-height: 27px;
+	margin: 0px;
+	overflow: hidden;
+	padding: 3px 1.8em;
+	text-align: center;
+	text-decoration: none;
+	text-overflow: ellipsis; 
         cursor: pointer; 
-        box-shadow: inset 0px 0px 0px 1px rgba(255,255,255,0.3);    
-        -webkit-text-shadow: 1px 1px 1px #134; 
-         -khtml-text-shadow: 1px 1px 1px #134;
-           -moz-text-shadow: 1px 1px 1px #134;
-	        text-shadow: 1px 1px 1px #134; 
+	        
+	background: #d4d4d4;  
+	background: -webkit-gradient(linear, 0% 0, 0% 100%, from(#ffffff), to(#bbbbbb)); 
+	-webkit-background-clip: padding-box; 
+	background: -moz-linear-gradient(0% 100% 90deg, #bbbbbb, #ffffff);
+        background: -o-linear-gradient(top, #ffffff, #bbbbbb);
+        background: -ms-linear-gradient(top, #ffffff, #bbbbbb);
+        background: linear-gradient(top, #ffffff, #bbbbbb);  
+        filter: progid:DXImageTransform.Microsoft.gradient(startColorstr='#FFFFFF', endColorstr='#BBBBBB'); 
+		
+	border-top: 1px solid #c7c7c7;
+	border-left: 1px solid #c7c7c7; 
+	border-right: 1px solid #a0a0a0;
+	border-bottom: 1px solid #868686;
+	
+	-webkit-text-shadow: 0px 1px 0px rgba(255, 255, 255, 0.7); 
+	 -khtml-text-shadow: 0px 1px 0px rgba(255, 255, 255, 0.7);
+	   -moz-text-shadow: 0px 1px 0px rgba(255, 255, 255, 0.7);
+	        text-shadow: 0px 1px 0px rgba(255, 255, 255, 0.7);
+	        
+	-webkit-box-shadow: inset rgba(255,255,255,0.9) 0px 1px 0px 0px; 
+	 -khtml-box-shadow: inset rgba(255,255,255,0.9) 0px 1px 0px 0px;
+	   -moz-box-shadow: inset rgba(255,255,255,0.9) 0px 1px 0px 0px;
+	     -o-box-shadow: inset rgba(255,255,255,0.9) 0px 1px 0px 0px;   
+               	box-shadow: inset rgba(255,255,255,0.9) 0px 1px 0px 0px; 
 }
+
 .blogin:active, 
-.blogin:focus {
-        color: #ffffff; background: #a91700; border: 1px solid #700f00; text-shadow: 1px 1px 1px #441811;
-} 
+.blogin:focus, 
 .blogin:hover      { 
-	color: #ffffff; background: #a91700; border: 1px solid #700f00; text-shadow: 1px 1px 1px #441811;
+	color: #000000 !important;
+        background: -webkit-gradient(linear, 0% 0, 0% 100%, from(#ffffff), to(#bbbbbb));		
+        background: -moz-linear-gradient(0% 100% 90deg, #bbbbbb, #ffffff);
+        background: -o-linear-gradient(top, #ffffff, #bbbbbb);
+        background: -ms-linear-gradient(top, #ffffff, #bbbbbb);
+        background: linear-gradient(top, #ffffff, #bbbbbb);  
+        filter: progid:DXImageTransform.Microsoft.gradient(startColorstr='#FFFFFF', endColorstr='#BBBBBB'); 
+		
+	border-top: 1px solid #bababa;
+	border-left: 1px solid #bababa; 
+	border-right: 1px solid #939393;
+	border-bottom: 1px solid #797979;
+	
+	-webkit-text-shadow: 0px 1px 0px rgba(255, 255, 255, 0.7); 
+	 -khtml-text-shadow: 0px 1px 0px rgba(255, 255, 255, 0.7);
+	   -moz-text-shadow: 0px 1px 0px rgba(255, 255, 255, 0.7);
+	        text-shadow: 0px 1px 0px rgba(255, 255, 255, 0.7); 
+	        
+	-webkit-box-shadow: rgba(99,99,99,0.2) 1px 1px 3px; 
+	 -khtml-box-shadow: rgba(99,99,99,0.2) 1px 1px 3px;
+	   -moz-box-shadow: rgba(99,99,99,0.2) 1px 1px 3px;
+	     -o-box-shadow: rgba(99,99,99,0.2) 1px 1px 3px; 
+               	box-shadow: rgba(99,99,99,0.2) 1px 1px 3px; 
+}  
+.blogin:active, 
+.blogin:focus     { 
+	border: 1px solid #666666;
 }
 
 

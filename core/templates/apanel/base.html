@@ -3,11 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <title>NeoDanneo APanel - {{ site_name }}</title>
-    <link rel="stylesheet" href="/static/apanel/template/Lite/css/template.css">
-    <link rel="stylesheet" href="/static/apanel/template/Lite/css/filebrowser.css">
-    <link rel="stylesheet" href="/static/apanel/template/Lite/css/calendar/calendar.css" />
-    <link rel="stylesheet" href="/static/apanel/template/Lite/css/colorbox/colorbox.css" />
-    <link rel="stylesheet" href="/static/apanel/template/Lite/css/colorpicker.css" />
+    <link rel="stylesheet" href="/static/apanel/css/template.css">
+    <link rel="stylesheet" href="/static/apanel/css/filebrowser.css">
+    <link rel="stylesheet" href="/static/apanel/css/calendar/calendar.css" />
+    <link rel="stylesheet" href="/static/apanel/css/colorbox/colorbox.css" />
+    <link rel="stylesheet" href="/static/apanel/css/colorpicker.css" />
     
     <script src="/static/apanel/javascript/jquery.js"></script>
     <script src="/static/apanel/javascript/script.js"></script>
@@ -18,16 +18,16 @@
     <script src="/static/apanel/javascript/calendar/calendar.js"></script>
     <script>
         $(function(){
-            $.template = "Lite";
+            $.template = "Old";
             $.errors   = "Ошибка";
             $.system();
             
             $("#menu-toggle").click(function() {
                 $("#aside").toggle();
                 if($("#aside").is(":hidden")){   
-                    $("#menup").attr({src:"/static/apanel/template/Lite/images/open.gif"});  
+                    $("#menup").attr({src:"/static/apanel/images/open.gif"});  
                 } else {  
-                    $("#menup").attr({src:"/static/apanel/template/Lite/images/closed.gif"});
+                    $("#menup").attr({src:"/static/apanel/images/closed.gif"});
                 }
             });
         });
@@ -56,7 +56,7 @@
                         <div class="menupanelin">Управление контентом</div>
                         <div class="menu-content">
                             <div class="panels menupanel" id="infopages">
-                                <img src="/static/apanel/template/Lite/images/menu/infopages.gif" alt=""> <span>Инфо страницы</span>
+                                <img src="/static/apanel/images/menu/infopages.gif" alt=""> <span>Инфо страницы</span>
                             </div>
                             <div class="mcont" style="display:none">
                                 <a class="interface" href="#">Список страниц</a>
@@ -64,7 +64,7 @@
                             </div>
 
                             <div class="panels menupanel" id="news">
-                                <img src="/static/apanel/template/Lite/images/menu/news.gif" alt=""> <span>Новости</span>
+                                <img src="/static/apanel/images/menu/news.gif" alt=""> <span>Новости</span>
                             </div>
                             <div class="mcont" style="display:none">
                                 <a class="interface" href="#">Список новостей</a>
@@ -75,16 +75,16 @@
                         <div class="menupanelin">Система</div>
                         <div class="menu-system">
                             <div class="panels menupanel" id="setting">
-                                <img src="/static/apanel/template/Lite/images/menu/setting.gif" alt=""> <span>Настройки</span>
+                                <img src="/static/apanel/images/menu/setting.gif" alt=""> <span>Настройки</span>
                             </div>
                             <div class="mcont" style="display:none">
-                                <a class="interface" href="#">Глобальные настройки</a>
-                                <a class="interface" href="#">Настройки системы</a>
+                                <a class="interface" href="/admin/settings">Глобальные настройки</a>
+                                <a class="interface" href="/admin/design">Управление оформлением</a>
                             </div>
                         </div>
                     </td>
                     <td class="panelinterface" id="menu-toggle">
-                        <img id="menup" src="/static/apanel/template/Lite/images/closed.gif" alt="Открыть/Закрыть" />
+                        <img id="menup" src="/static/apanel/images/closed.gif" alt="Открыть/Закрыть" />
                     </td>
                     <td id="section" class="bill">
                         <div class="article">

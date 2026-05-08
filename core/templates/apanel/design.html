@@ -1,0 +1,68 @@
+{% extends "apanel/base.html" %}
+
+{% block content %}
+<div class="section"> 
+    <table class="work">  
+        <caption>Управление оформлением</caption> 
+        <tr>
+            <th class="ar"><strong>Параметр</strong></th>
+            <th><strong>Значение</strong></th>
+        </tr> 
+        
+        <tr>
+            <td class="ar">Текущая тема:</td>
+            <td class="al"><strong>{{ site_temp }}</strong></td>
+        </tr>
+    </table>
+
+    <br>
+
+    <div class="attention">
+        <div class="attention-title">Live Editor</div>
+        <div class="attention-text">
+            Вы можете редактировать основной шаблон и CSS текущей темы оформления прямо здесь.
+        </div>
+    </div>
+
+    <form action="/admin/design/save" method="post">
+        <table class="work">
+            <caption>Редактор файлов</caption>
+            <tr>
+                <td>
+                    <select name="file_name" id="file_selector" onchange="load_file_content()">
+                        <option value="index.html">Шаблон (index.html)</option>
+                        <option value="css/screen.css">Стили (css/screen.css)</option>
+                    </select>
+                </td>
+            </tr>
+            <tr>
+                <td>
+                    <textarea name="content" id="file_content" style="width: 100%; height: 500px; font-family: monospace;">{{ initial_content }}</textarea>
+                </td>
+            </tr>
+            <tr>
+                <td>
+                    <input type="submit" class="but" value="Сохранить изменения">
+                </td>
+            </tr>
+        </table>
+    </form>
+</div>
+
+<script>
+    // Используем JSON.parse для безопасной загрузки контента, экранированного в Rust
+    const files = {
+        "index.html": {{ index_html_content_json | safe }},
+        "css/screen.css": {{ screen_css_content_json | safe }}
+    };
+
+    function load_file_content() {
+        const selector = document.getElementById('file_selector');
+        const textarea = document.getElementById('file_content');
+        textarea.value = files[selector.value];
+    }
+    
+    // Инициализация при загрузке
+    window.onload = load_file_content;
+</script>
+{% endblock %}

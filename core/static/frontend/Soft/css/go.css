@@ -1,0 +1,202 @@
+/**
+ * Project:      CMS Danneo : Content management system
+ * File:         go.css
+ * @version	 $Id: Danneo CMS v.0.5.5 Release $
+ * @package      CMS Danneo basis kernel
+ * @copyright    Copyright (C) 2004 - 2013 Danneo Team. All rights reserved.
+ * @link         http://danneo.com, http://danneo.ru
+ * @license      http://www.gnu.org/licenses/gpl-2.0.html   GNU General Public License, version 2
+ */
+* {
+	margin: 0;
+	padding: 0;
+	font-size: 1em;
+	text-decoration: none;
+	border: none;
+	list-style: none;
+	outline: none; 
+}
+a:link, a:visited       { color: #0c9cf5; text-decoration: none; }
+a:hover                 { color: #f60; }
+html { 
+	background: #255994;
+	position: absolute;
+	top: 45%;
+	left: 50%;   
+}
+body {
+	color: #333;
+	font: 12px/20px "Helvetica Neue", Arial, sans-serif;
+	position: absolute;
+	top: 45%;
+	left: 50%;
+	margin: -150px 0 0 -265px;
+	width: 530px;
+	padding: 10px;  
+	background: #9cb6d4; 
+	-webkit-border: 1px solid #c0d0e4; 
+	 -khtml-border: 1px solid #c0d0e4;
+	   -moz-border: 1px solid #c0d0e4;
+	        border: 1px solid #c0d0e4; 
+	-webkit-border-radius: 5px; 
+	 -khtml-border-radius: 5px;
+	   -moz-border-radius: 5px;
+	        border-radius: 5px; 
+	-webkit-box-shadow: rgba(0,0,0,0.5) 1px 1px 12px; 
+	 -khtml-box-shadow: rgba(0,0,0,0.5) 1px 1px 12px;
+	   -moz-box-shadow: rgba(0,0,0,0.5) 1px 1px 12px;
+	     -o-box-shadow: rgba(0,0,0,0.5) 1px 1px 12px;
+	        box-shadow: rgba(0,0,0,0.5) 1px 1px 12px; 
+	-webkit-text-shadow: #fff 0 1px 0; 
+	 -khtml-text-shadow: #fff 0 1px 0;
+	   -moz-text-shadow: #fff 0 1px 0;
+	        text-shadow: #fff 0 1px 0;
+	        
+	-webkit-animation-name: pop;
+	-webkit-animation-duration: .5s;
+	-webkit-animation-iteration-count: 1;
+	-webkit-animation-timing-function: ease-in;  
+        	
+	   -moz-animation-name: pop;
+	   -moz-animation-duration: .5s;
+	   -moz-animation-iteration-count: 1;
+	   -moz-animation-timing-function: ease-in; 
+        	
+	   -o-animation-name: pop;
+	   -o-animation-duration: .5s;
+	   -o-animation-iteration-count: 1;
+	   -o-animation-timing-function: ease-in; 
+        	   
+	        animation-name: pop;
+	        animation-duration: .5s;
+	        animation-iteration-count: 1;
+	        animation-timing-function: ease-in;   	
+}
+
+@-webkit-keyframes pop {
+	from { -webkit-transform: scale(.1); opacity: 0; }
+	85%  { -webkit-transform: scale(1.03); opacity: 1; }
+	to   { -webkit-transform: scale(1); }
+}
+@-moz-keyframes pop {
+	from { -moz-transform: scale(.1); opacity: 0; }
+	99%  { -moz-transform: scale(1); opacity: 1; }
+	to   { -moz-transform: scale(1); }
+}
+@-o-keyframes pop {
+	from { -o-transform: scale(.1); opacity: 0; }
+	99%  { -o-transform: scale(1); opacity: 1; }
+	to   { -o-transform: scale(1); }
+}
+@keyframes pop {
+	from { transform: scale(.1); opacity: 0; }
+	99%  { transform: scale(1); opacity: 1; }
+	to   { transform: scale(1); }
+}
+
+div { 
+        background: #f2f7fa;
+        padding: 36px 54px 30px;    
+	-webkit-border: 3px solid #c0d0e4; 
+	 -khtml-border: 3px solid #c0d0e4;
+	   -moz-border: 3px solid #c0d0e4;
+	        border: 3px solid #c0d0e4; 
+        -webkit-text-shadow: 1px 1px 1px #dde5ee; 
+         -khtml-text-shadow: 1px 1px 1px #dde5ee;
+           -moz-text-shadow: 1px 1px 1px #dde5ee;
+                text-shadow: 1px 1px 1px #dde5ee; 
+        -webkit-box-shadow: inset rgba(255,255,255,0.9) 0px 0px 0px 1px; 
+         -khtml-box-shadow: inset rgba(255,255,255,0.9) 0px 0px 0px 1px;
+           -moz-box-shadow: inset rgba(255,255,255,0.9) 0px 0px 0px 1px;
+	        box-shadow: inset rgba(255,255,255,0.9) 0px 0px 0px 1px;  
+}
+h1 {   
+        color: #ca0000;  
+        font-size: 36px; 
+        z-index: -999; 
+        font-weight: normal;  
+	text-indent: 18px; 
+	margin: 0 0 20px;    
+        -webkit-text-shadow: 1px 1px 0px #eee; 
+         -khtml-text-shadow: 1px 1px 0px #eee;
+           -moz-text-shadow: 1px 1px 0px #eee;
+                text-shadow: 1px 1px 0px #eee;
+}    
+div p { 
+	color: #000;  
+	text-shadow: none; 
+        margin: 0 0 5px;  
+}      
+div strong {   
+        display: block;  
+	color: #000; 
+        font-size: 18px;  
+        font-weight: normal;
+	text-shadow: none; 
+        margin: 0;  
+}       
+div big {   
+        display: block;  
+	color: #ca0000; 
+        font-size: 18px;  
+        font-weight: normal;
+	text-shadow: none; 
+        margin: 0 0 10px;  
+}    
+div .gray { 
+	color: #999;  
+	text-shadow: none; 
+        margin: 5px 0 0;  
+} 
+/* Buton Forms */
+button {
+        background: #9cb6d4; 
+        background: -webkit-gradient(linear, left top, left bottom, from(#d4e4f5), to(#6493c3));
+        background: -khtml-gradient(linear, left top, left bottom, from(#d4e4f5), to(#6493c3));
+        background: -moz-linear-gradient(top,  #d4e4f5,  #6493c3);
+        background: -o-linear-gradient(top,  #d4e4f5,  #6493c3);
+        background: linear-gradient(top,  #d4e4f5,  #6493c3); 
+        filter: progid:DXImageTransform.Microsoft.gradient(startColorstr='#D4E4F5', endColorstr='#6493C3');
+        -ms-filter: progid:DXImageTransform.Microsoft.gradient(startColorstr='#D4E4F5', endColorstr='#6493C3');
+        display: inline-block; 
+        color: #ffffff; 
+        font: 10px "Lucida Grande",Tahoma,Verdana,Sans-serif;  
+        text-transform: uppercase; 
+        width: 110px; 
+        height: 26px; 
+        line-height: 14px;
+        padding: 1px 5px 3px; 
+        margin: 15px 0 0;  
+        overflow: visible; 
+        cursor: pointer; 
+	-webkit-border: 1px solid #9cb6d4; 
+	 -khtml-border: 1px solid #9cb6d4;
+	   -moz-border: 1px solid #9cb6d4;
+	        border: 1px solid #9cb6d4;  
+        -webkit-box-shadow: inset 0px 0px 0px 1px rgba(255,255,255,0.5); 
+         -khtml-box-shadow: inset 0px 0px 0px 1px rgba(255,255,255,0.5);
+           -moz-box-shadow: inset 0px 0px 0px 1px rgba(255,255,255,0.5);
+	        box-shadow: inset 0px 0px 0px 1px rgba(255,255,255,0.5); 
+        -webkit-text-shadow: -1px -1px 0px #999; 
+         -khtml-text-shadow: -1px -1px 0px #999;
+           -moz-text-shadow: -1px -1px 0px #999;
+                text-shadow: -1px -1px 0px #999;    
+}
+button:active, 
+button:focus,
+button:hover {      
+        background: #4479b0; 
+        background: -webkit-gradient(linear, left top, left bottom, from(#bfd7f0), to(#4479b0));
+        background: -khtml-gradient(linear, left top, left bottom, from(#bfd7f0), to(#4479b0));
+        background: -moz-linear-gradient(top,  #bfd7f0,  #4479b0);
+        background: -o-linear-gradient(top,  #bfd7f0,  #4479b0);
+        background: linear-gradient(top,  #bfd7f0,  #4479b0); 
+        filter: progid:DXImageTransform.Microsoft.gradient(startColorstr='#BFD7F0', endColorstr='#4479B0');
+        -ms-filter: progid:DXImageTransform.Microsoft.gradient(startColorstr='#BFD7F0', endColorstr='#4479B0');  
+	-webkit-border: 1px solid #8aa9cc; 
+	 -khtml-border: 1px solid #8aa9cc;
+	   -moz-border: 1px solid #8aa9cc;
+	        border: 1px solid #8aa9cc;
+} 
+
+

@@ -1,0 +1,53 @@
+{% extends "apanel/base.html" %}
+
+{% block content %}
+<div class="section"> 
+    <form action="/admin/settings/save" method="post" name="setting">
+        <table class="work">  
+            <caption>Глобальные настройки</caption> 
+            <tr>
+                <th class="ar"><strong>Параметр</strong></th>
+                <th><strong>Значение</strong></th>
+                <th><strong>Описание</strong></th>
+            </tr> 
+            
+            <tr>
+                <td class="ar">Название сайта:</td>
+                <td class="al"><input type="text" name="site_name" value="{{ site_name }}" size="40"></td>
+                <td class="al">Используется в заголовках и письмах</td>
+            </tr>
+
+            <tr>
+                <td class="ar">Email администратора:</td>
+                <td class="al"><input type="text" name="admin_email" value="{{ admin_email }}" size="40"></td>
+                <td class="al">Для системных уведомлений</td>
+            </tr>
+
+            <tr>
+                <td class="ar">URL сайта:</td>
+                <td class="al"><input type="text" name="site_url" value="{{ site_url }}" size="40"></td>
+                <td class="al">Полный URL с http(s)://</td>
+            </tr>
+            
+            <tr>
+                <td class="ar">Тема оформления:</td>
+                <td class="al">
+                    <select name="site_temp">
+                        {% for theme in themes %}
+                        <option value="{{ theme }}" {% if theme == site_temp %}selected{% endif %}>{{ theme }}</option>
+                        {% endfor %}
+                    </select>
+                </td>
+                <td class="al">Тема по умолчанию для фронтенда</td>
+            </tr>
+
+            <tr>
+                <td class="ar">&nbsp;</td>
+                <td class="al" colspan="2">
+                    <input type="submit" class="but" value="Сохранить настройки">
+                </td>
+            </tr> 
+        </table>
+    </form>
+</div>
+{% endblock %}

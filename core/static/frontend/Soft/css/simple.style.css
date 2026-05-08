@@ -1,0 +1,81 @@
+/**
+ * Project:      CMS Danneo : Content management system
+ * File:         simple.style.css
+ * @version	 $Id: Danneo CMS v.0.5.5 Release $
+ * @package      CMS Danneo basis kernel
+ * @copyright    Copyright (C) 2004 - 2013 Danneo Team. All rights reserved.
+ * @link         http://danneo.com, http://danneo.ru
+ * @license      http://www.gnu.org/licenses/gpl-2.0.html   GNU General Public License, version 2
+ */
+*		{ margin: 0; padding: 0; vertical-align: baseline; }
+body		{ margin: auto; line-height: 1.4em; font-family: Arial; font-size: 12px; background-color: #fff; }
+table, td, div	{ color: #363636; }
+img		{ border: 0px; }
+
+.left		{ float: left; }
+.right		{ float: right; }
+/* thumb float*/
+.imgleft	{ float: left; margin: .2em 1em 1em 0 !important; }
+.imgright	{ float: right; margin: .2em 0 1em 1em !important; }
+.imgtext-left	{ float: left; margin: 1em 1em 1em 0 !important; }
+.imgtext-right	{ float: right; margin: 1em 0 1em 1em !important; }  
+.imgtext-center	{ float: none; display: block; margin: 1em auto; padding: 0; text-align: center; clear: both; }
+
+.al		{ text-align: left; }
+.ar		{ text-align: right; }
+.ac		{ text-align: center; }
+.va		{ vertical-align: middle; }
+.clear		{ clear: both; height: 0; display: block; font-size: 1px; line-height: 1px; background: transparent; }
+.clear-line	{ clear: both; height: 7px; display: block; font-size: 7px; line-height: 7px; background: transparent; }
+
+
+a:link,
+a:visited	{ color: #265e9d; text-decoration: none; }
+a:hover		{ color: #748fb3; }
+
+.pages                  { font-size: 11px; margin: 0; padding: 7px; text-align: center; clear: both; }
+.pages span		{ color: #ccc; border: 1px solid #f1f1f1; background-color: #fff; }
+.pages.pagesrow		{ color: #fff; background-color: #6699cc; border-color: #24578a; }
+.pages.pagesrow strong	{ color: #e6f5fd; }
+.pages a		{ border: 1px solid #6699cc; background-color: #e6f5fd; }
+.pages a:hover		{ color: #fff; background-color: #6699cc; border-color: #24578a; text-decoration: none; }
+
+.redfont		{ color: #8d4d5d; }
+/* Images */
+.tableod		{ border: none; padding: 10px 2px 3px; text-align: center; }
+.tableod #img		{ margin: 5px 10px 0; }
+.tableod #imgtitle	{ padding: 5px; color: #363636; height: 25px; margin: 10px 0 0 }
+.tablein		{ padding: 5px; text-align: center; color: #b90000; }
+.tablein strong		{ color: #888; }
+
+.info		        { border: none; width: 100%; }
+.info.head,
+.info.head td		{ padding: 7px; border-bottom: 1px solid #ccc; color: #b90000; }
+.info td		{ padding: 7px; border-bottom: 1px solid #ccc; color: #888; }
+
+.mediain		{ display: inline; padding: 3px; }
+.mediaod		{ padding: 1px; border: solid 5px #e5e5e5; }
+.mediait		{ padding: 1px; border: solid 5px #b90000; }
+
+/* Redirect */
+.redirect		{ background: #fff; margin: 100px auto 0; }
+.redirecttitle		{ color: #600; background: #000; line-height: 100%; padding: .4em 1em; }
+.redirecttext		{ font-size: 12px; width: 50%; padding: 4em; color: #999;
+                          border: 1px solid #d4d4d4;
+                          -moz-box-shadow: 1px 1px 9px #ddd; -webkit-box-shadow: 1px 1px 9px #ddd;
+                          -khtml-box-shadow: 1px 1px 9px #ddd; box-shadow: inset 1px 1px 9px #ddd;
+                          -moz-border-radius: 5px; -webkitborder-radius: 5px;
+                          -khtml-border-radius: 5px; border-radius: 5px; }
+.redirecttext big	{ font-size: 1.4em; color: #666; padding-left: 1em; vertical-align: middle; }
+.redirecttext p  	{ font-size: 12px; }
+.redirecttext p a	{ text-decoration: underline; }
+
+/* Print */
+#print		        { padding: 15px; }
+#print .printrow	{ padding: 10px 0; margin: 0; text-align: left; }
+#print .printrow .title	{ font: bold 16px/21pt Arial, Helvetica, sans-serif; }
+#print .printrow .text	{ color: #000; font: 14px/16pt Arial, Helvetica, sans-serif; }
+#print .text .thumb img	{ padding: .3em; }
+#print .printline	{ border: 1px dotted #ddd; padding: 15px; color: #666; font-size: 12px; clear: both; }
+#print .printline p	{ padding: 2px; margin: 0; } 
+#print p	        { padding: 5px 16px; margin: 0; }

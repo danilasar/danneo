@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="{{ langcode | default(value='ru') }}">
+<head>   
+<meta charset="{{ langcharset | default(value='UTF-8') }}" /> 
+<title>{{ title | default(value=site_name) }}</title>
+<meta name="distribution" content="global" />
+<meta name="generator" content="NeoDanneo 2.0 (Rust)" />
+<meta name="author" content="{{ site_name }}" />
+<meta name="copyright" content="Copyright (c) {{ site_name }}" />
+<meta name="keywords" content="{{ keywords | default(value='') }}" />
+<meta name="description" content="{{ descript | default(value='') }}" />
+<script src="/static/frontend/Soft/javascript/jquery.js"></script> 
+<script src="/static/frontend/Soft/javascript/jquery.colorbox.js"></script>
+<script src="/static/frontend/Soft/javascript/menu.js"></script>
+<script src="/static/frontend/Soft/javascript/soft.js"></script>
+<link rel="stylesheet" href="/static/frontend/Soft/css/screen.css" />
+<link rel="stylesheet" href="/static/frontend/Soft/css/menu.css" />  
+<link rel="stylesheet" href="/static/frontend/Soft/css/liquid-slider.css" /> 
+<link rel="stylesheet" href="/static/frontend/Soft/javascript/colorbox/colorbox.css" />
+<link rel="alternate" type="application/rss+xml" title="{{ site_name }}" href="/rss.php?dn=news" /> 
+<link rel="icon" href="/favicon.ico" type="image/x-icon" />
+<link rel="shortcut icon" href="/favicon.ico" type="image/x-icon" /> 
+<script>$(function(){ $.url = ''; });</script>
+</head>
+<body>
+<div id="logo">
+ <div id="w1"><h1><a href="/" title="{{ site_name }}">{{ site_name }}</a></h1></div>
+</div>
+<div id="top-menu">
+  <div id="w2">{{ top_menu | default(value='') | safe }}</div>
+</div>
+<div id="wrap">
+<table id="table-main" cellspacing="0" cellpadding="0">
+ <tbody>
+  <tr>
+   <td id="table-left">
+    {{ positions.leftblock | default(value="") | safe }}
+   </td>
+   <td id="table-center">
+    {{ positions.promoblock | default(value="") | safe }}
+    {{ positions.topblock | default(value="") | safe }}
+    {{ breadcrumbs | default(value='') | safe }}
+    
+    <div class="article">
+        {% block content %}{% endblock %}
+    </div>
+
+    {{ positions.botblock | default(value="") | safe }}
+   </td>
+   <td id="table-right">
+    {{ positions.rightblock | default(value="") | safe }}
+   </td>
+  </tr>
+ </tbody>
+</table>
+</div>
+<div id="bot-menu">
+  <div id="w3"><div class="right">{{ bot_menu | default(value='') | safe }}</div></div>
+</div>
+<table id="table-bot" cellspacing="0" cellpadding="0">
+ <tr>
+  <td class="va al">&copy; 2026 {{ site_name }}</td>
+  <td class="va al"></td>
+  <td class="va ar">Powered by <a href="/">NeoDanneo 2.0</a></td>
+ </tr>
+</table>
+</body>
+</html>

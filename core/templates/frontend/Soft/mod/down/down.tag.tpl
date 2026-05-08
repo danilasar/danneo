@@ -1,0 +1,1 @@
+<div class="tags-info">{text}</div>
