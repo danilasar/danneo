@@ -49,6 +49,7 @@ pub struct Entrypoints {
     pub settings: Option<String>,
     pub permissions: Option<String>,
     pub hooks: Option<String>,
+    pub entities: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -88,4 +89,24 @@ pub struct BlockSettingSchema {
     pub min: Option<i64>,
     pub max: Option<i64>,
     pub required: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EntitySchema {
+    pub table_name: String,
+    pub name: String,
+    pub fields: Vec<EntityField>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EntityField {
+    pub name: String,
+    #[serde(rename = "type")]
+    pub field_type: String, // "integer", "string", "text", "boolean", "datetime"
+    pub primary_key: Option<bool>,
+    pub auto_increment: Option<bool>,
+    pub nullable: Option<bool>,
+    pub unique: Option<bool>,
+    pub default: Option<serde_json::Value>,
+    pub label: Option<String>,
 }

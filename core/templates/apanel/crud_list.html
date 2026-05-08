@@ -1,0 +1,34 @@
+{% extends "apanel/base.html" %}
+{% block content %}
+<div class="section">
+    <div style="margin-bottom:10px;">
+        <a href="/admin/crud/{{ module }}/{{ entity }}/edit" class="interface">Добавить запись</a>
+        <a href="/admin/modules" class="interface">К списку модулей</a>
+    </div>
+
+    <table class="work">
+        <caption>{{ entity_name }} ({{ module }})</caption>
+        <thead>
+            <tr>
+                {% for col in columns %}
+                    <th>{{ col }}</th>
+                {% endfor %}
+                <th style="width:100px;">Действие</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in rows %}
+                <tr>
+                    {% for col in columns %}
+                        <td class="al">{{ row[col] | default(value="") }}</td>
+                    {% endfor %}
+                    <td class="ac">
+                        <a href="/admin/crud/{{ module }}/{{ entity }}/edit/{{ row[primary_key] }}">Изменить</a> |
+                        <a href="#" onclick="if(confirm('Удалить?')) { window.location.href='/admin/crud/{{ module }}/{{ entity }}/delete/' + '{{ row[primary_key] }}'; } return false;">Удалить</a>
+                    </td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

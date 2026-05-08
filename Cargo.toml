@@ -27,3 +27,4 @@ tempfile = "3.10"
 rust-i18n = "3.0"
 slug = "0.1"
 toml = "0.8"
+

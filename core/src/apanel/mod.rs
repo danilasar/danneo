@@ -9,3 +9,4 @@ pub mod modules;
 pub mod seo;
 pub mod settings;
 pub mod utils;
+pub mod crud;

@@ -1,6 +1,8 @@
+use crate::models::core_block_definitions;
+use crate::models::core_module_entities;
 use crate::models::core_modules;
 use crate::registry::PackageRegistry;
-use sea_orm::{ActiveModelTrait, DatabaseConnection, Set};
+use sea_orm::{ActiveModelTrait, DatabaseConnection, Set, DbErr};
 use std::sync::Arc;
 
 pub struct PackageInstaller {
@@ -63,8 +65,33 @@ impl PackageInstaller {
                 return Err(e.to_string());
             }
 
-            tracing::info!("Module {} installed successfully", package_id);
-            Ok(())
+            // After inserting module record, handle declarative entities if provided
+            if let Some(entry) = manifest.entrypoints.as_ref() {
+                if let Some(entities_path) = &entry.entities {
+                    // Resolve path relative to the module directory
+                    let module_dir = self.registry.read().await.packages_dir.join(&module_code);
+                    let ent_path = module_dir.join(entities_path);
+                    let content = std::fs::read_to_string(&ent_path)
+                        .map_err(|e| format!("Failed to read entities file {}: {}", ent_path.display(), e))?;
+                    let schema: crate::crud::EntitySchema = serde_json::from_str(&content)
+                        .map_err(|e| format!("Invalid entities JSON: {}", e))?;
+                    // Create physical table
+                    crate::crud::create_entity_table(&self.db, &schema).await
+                        .map_err(|e| format!("Failed to create entity table: {}", e))?;
+                    // Insert metadata into core_module_entities
+                    let entity_model = crate::models::core_module_entities::ActiveModel {
+                        module_code: Set(module_code.clone()),
+                        entity_name: Set(schema.table_name.clone()), // using table_name as entity identifier
+                        table_name: Set(schema.table_name.clone()),
+                        schema: Set(serde_json::to_value(&schema).map_err(|e| e.to_string())?),
+                        ..Default::default()
+                    };
+                    entity_model.insert(self.db.as_ref()).await
+                        .map_err(|e| format!("Failed to store entity metadata: {}", e))?;
+                }
+            }
+            // Entity handling (if any) completed – module install done
+            return Ok(());
         } else if let Some(manifest) = registry.blocks.get(package_id) {
             let block_code = manifest.block.id.clone();
             
@@ -96,6 +123,7 @@ impl PackageInstaller {
     pub async fn uninstall(&self, package_id: &str) -> Result<(), String> {
         use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 
+        // Delete module record and clean up dynamic entities
         let module_res = crate::models::core_modules::Entity::delete_many()
             .filter(crate::models::core_modules::Column::Code.eq(package_id))
             .exec(self.db.as_ref())
@@ -103,11 +131,28 @@ impl PackageInstaller {
 
         if let Ok(res) = module_res {
             if res.rows_affected > 0 {
-                tracing::info!("Module {} uninstalled successfully", package_id);
+                // Remove dynamic entity tables and metadata
+                use crate::models::core_module_entities::Entity as EntEntity;
+                let ents = EntEntity::find()
+                    .filter(crate::models::core_module_entities::Column::ModuleCode.eq(package_id))
+                    .all(self.db.as_ref())
+                    .await
+                    .unwrap_or_default();
+                for ent in ents {
+                    let _ = crate::crud::drop_entity_table(&self.db, &ent.table_name).await;
+                }
+                // Delete metadata rows
+                EntEntity::delete_many()
+                    .filter(crate::models::core_module_entities::Column::ModuleCode.eq(package_id))
+                    .exec(self.db.as_ref())
+                    .await
+                    .ok();
+                tracing::info!("Module {} uninstalled and dynamic tables dropped", package_id);
                 return Ok(());
             }
         }
 
+        // Fallback to block uninstallation
         let block_res = crate::models::core_block_definitions::Entity::delete_many()
             .filter(crate::models::core_block_definitions::Column::BlockCode.eq(package_id))
             .exec(self.db.as_ref())

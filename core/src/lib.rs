@@ -2,6 +2,7 @@ pub mod acl;
 pub mod apanel;
 pub mod auth;
 pub mod blocks;
+pub mod crud;
 pub mod models;
 pub mod module;
 pub mod registry;
@@ -101,7 +102,12 @@ pub async fn run() {
             post(apanel::modules::uninstall_module),
         )
         .route("/modules/enable", post(apanel::modules::enable_module))
-        .route("/modules/disable", post(apanel::modules::disable_module))
+        .route("/crud/:module/:entity/list", get(apanel::crud::list_page))
+        .route("/crud/:module/:entity/edit", get(apanel::crud::edit_page))
+        .route("/crud/:module/:entity/edit/:id", get(apanel::crud::edit_page))
+        .route("/crud/:module/:entity/save", post(apanel::crud::save_handle))
+        .route("/crud/:module/:entity/delete/:id", get(apanel::crud::delete_handle))
+        .route("/crud/:module/:entity/:action", get(apanel::crud::handle))
         .layer(axum::middleware::from_fn_with_state(
             app_state.clone(),
             apanel::middleware::admin_acl_middleware,

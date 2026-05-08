@@ -17,6 +17,7 @@ struct PackageViewModel {
     description: Option<String>,
     is_installed: bool,
     is_enabled: bool,
+    entities: Vec<String>,
 }
 
 pub async fn list_modules(State(state): State<Arc<AppState>>) -> impl IntoResponse {
@@ -42,6 +43,17 @@ pub async fn list_modules(State(state): State<Arc<AppState>>) -> impl IntoRespon
         installed_map.insert(b.block_code.clone(), b.enabled);
     }
 
+    // Fetch all entities to show in the list
+    use crate::models::core_module_entities;
+    let all_entities = match core_module_entities::Entity::find().all(state.db.as_ref()).await {
+        Ok(e) => e,
+        Err(_) => vec![],
+    };
+    let mut entity_map: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
+    for e in all_entities {
+        entity_map.entry(e.module_code).or_default().push(e.entity_name);
+    }
+
     let mut packages_view = Vec::new();
     {
         let package_registry = state.packages.read().await;
@@ -60,6 +72,7 @@ pub async fn list_modules(State(state): State<Arc<AppState>>) -> impl IntoRespon
                 description: manifest.package.description.clone(),
                 is_installed,
                 is_enabled,
+                entities: entity_map.get(&manifest.package.id).cloned().unwrap_or_default(),
             });
         }
         for (_, manifest) in package_registry.blocks.iter() {
@@ -77,6 +90,7 @@ pub async fn list_modules(State(state): State<Arc<AppState>>) -> impl IntoRespon
                 description: None,
                 is_installed,
                 is_enabled,
+                entities: vec![],
             });
         }
     }
