@@ -24,6 +24,7 @@ casbin.workspace = true
 sea-orm-adapter.workspace = true
 rhai = "1.0"
 rust-i18n.workspace = true
+slug.workspace = true
 migration = { path = "../migration" }
 
 [dev-dependencies]

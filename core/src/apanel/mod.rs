@@ -7,3 +7,4 @@ pub mod utils;
 pub mod amanage;
 pub mod agroups;
 pub mod middleware;
+pub mod seo;

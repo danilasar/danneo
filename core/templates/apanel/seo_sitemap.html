@@ -1,0 +1,53 @@
+{% extends "apanel/base.html" %}
+
+{% block content %}
+<div class="section">
+    <div style="margin-bottom:10px;">
+        <a href="/admin/seo" class="interface{% if active_tab == "settings" %} current{% endif %}">Настройки</a>
+        <a href="/admin/seo/sitemap" class="interface{% if active_tab == "sitemap" %} current{% endif %}">Google Site-Map</a>
+        <a href="/admin/seo/social" class="interface{% if active_tab == "social" %} current{% endif %}">Социальные закладки</a>
+    </div>
+
+    <form action="/admin/seo/sitemap/save" method="post">
+        <table class="work">
+            <caption>Google Site-Map</caption>
+            <tr>
+                <th>Модуль</th>
+                <th>Код</th>
+                <th>Добавить</th>
+                <th>&lt;changefreq&gt;</th>
+                <th>&lt;priority&gt;</th>
+            </tr>
+            {% for item in sitemap %}
+            <tr>
+                <td class="al">{{ item.title }}</td>
+                <td class="ac"><code>{{ item.code }}</code></td>
+                <td class="ac">
+                    <input name="add_{{ item.code }}" value="1" type="checkbox" {% if item.add %}checked{% endif %}>
+                </td>
+                <td class="ac">
+                    <select name="freq_{{ item.code }}">
+                        {% for freq in changefreq %}
+                        <option value="{{ freq }}" {% if freq == item.freq %}selected{% endif %}>{{ freq }}</option>
+                        {% endfor %}
+                    </select>
+                </td>
+                <td class="ac">
+                    <select name="prio_{{ item.code }}">
+                        {% for prio in priorities %}
+                        <option value="{{ prio }}" {% if prio == item.prio %}selected{% endif %}>{{ prio }}</option>
+                        {% endfor %}
+                    </select>
+                </td>
+            </tr>
+            {% endfor %}
+            <tr>
+                <td class="ar">&nbsp;</td>
+                <td class="al" colspan="4">
+                    <input accesskey="s" class="but" value="Сохранить и создать sitemap.xml" type="submit">
+                </td>
+            </tr>
+        </table>
+    </form>
+</div>
+{% endblock %}

@@ -1,0 +1,89 @@
+{% extends "apanel/base.html" %}
+
+{% block content %}
+<div class="section">
+    <div style="margin-bottom:10px;">
+        <a href="/admin/seo" class="interface{% if active_tab == "settings" %} current{% endif %}">Настройки</a>
+        <a href="/admin/seo/sitemap" class="interface{% if active_tab == "sitemap" %} current{% endif %}">Google Site-Map</a>
+        <a href="/admin/seo/social" class="interface{% if active_tab == "social" %} current{% endif %}">Социальные закладки</a>
+    </div>
+
+    <table class="work">
+        <caption>Социальные закладки</caption>
+        <tr>
+            <th>Иконка</th>
+            <th>Ссылка</th>
+            <th>Позиция</th>
+            <th>Действие</th>
+        </tr>
+        {% for item in social %}
+        <tr>
+            <td class="ac">{% if item.icon != "" %}<img src="/{{ item.icon }}" alt="{{ item.alt }}" style="max-height:24px;">{% endif %}</td>
+            <td class="al"><input type="text" readonly class="readonly" value="{{ item.link }}" size="70"></td>
+            <td class="ac">{{ item.posit }}</td>
+            <td class="ac">
+                <a href="javascript:void(0)" class="edit-social" data-id="{{ loop.index0 }}" data-link="{{ item.link }}" data-icon="{{ item.icon }}" data-alt="{{ item.alt }}" data-posit="{{ item.posit }}" onclick="edit_social(this)">Изменить</a> |
+                <a href="/admin/seo/social/delete?id={{ loop.index0 }}" onclick="return confirm('Удалить социальную закладку?')">Удалить</a>
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+
+    <br>
+
+    <form action="/admin/seo/social/save" method="post">
+        <input type="hidden" name="id" id="social_id">
+        <table class="work">
+            <caption id="social_caption">Добавить социальную закладку</caption>
+            <tr>
+                <td class="first"><span>*</span> Ссылка</td>
+                <td>
+                    <input type="text" name="link" id="social_link" size="90" style="width:75%;" required>
+                    <div class="help">Используйте макросы {link} для URL страницы и {title} для заголовка.</div>
+                </td>
+            </tr>
+            <tr>
+                <td class="first"><span>*</span> Иконка</td>
+                <td>
+                    <input name="icon" id="social_icon" size="50" type="text" required>
+                </td>
+            </tr>
+            <tr>
+                <td>Alt изображения</td>
+                <td><input name="alt" id="social_alt" size="50" type="text"></td>
+            </tr>
+            <tr>
+                <td>Позиция</td>
+                <td><input name="posit" id="social_posit" size="5" type="number" value="0"></td>
+            </tr>
+            <tr>
+                <td class="ar">&nbsp;</td>
+                <td class="al">
+                    <input accesskey="s" class="but" value="Сохранить" type="submit">
+                    <input class="but" value="Сброс" type="button" onclick="reset_social()">
+                </td>
+            </tr>
+        </table>
+    </form>
+</div>
+
+<script>
+function edit_social(el) {
+    document.getElementById('social_id').value = el.getAttribute('data-id');
+    document.getElementById('social_link').value = el.getAttribute('data-link');
+    document.getElementById('social_icon').value = el.getAttribute('data-icon');
+    document.getElementById('social_alt').value = el.getAttribute('data-alt');
+    document.getElementById('social_posit').value = el.getAttribute('data-posit');
+    document.getElementById('social_caption').innerText = 'Редактировать социальную закладку';
+}
+
+function reset_social() {
+    document.getElementById('social_id').value = '';
+    document.getElementById('social_link').value = '';
+    document.getElementById('social_icon').value = '';
+    document.getElementById('social_alt').value = '';
+    document.getElementById('social_posit').value = '0';
+    document.getElementById('social_caption').innerText = 'Добавить социальную закладку';
+}
+</script>
+{% endblock %}

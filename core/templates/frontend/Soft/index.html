@@ -3,13 +3,13 @@
 
 <head>
   <meta charset="{{ langcharset | default(value='UTF-8') }}" />
-  <title>{{ title | default(value=site_name) }}</title>
+  <title>{% if seo is defined %}{{ seo.title }}{% elif title is defined %}{{ title }}{% else %}{{ site_name }}{% endif %}</title>
   <meta name="distribution" content="global" />
   <meta name="generator" content="Danneo 2.0 (Rust)" />
   <meta name="author" content="{{ site_name }}" />
   <meta name="copyright" content="Copyright (c) {{ site_name }}" />
-  <meta name="keywords" content="{{ keywords | default(value='') }}" />
-  <meta name="description" content="{{ descript | default(value='') }}" />
+  <meta name="keywords" content="{% if seo is defined %}{{ seo.keywords }}{% else %}{{ keywords | default(value='') }}{% endif %}" />
+  <meta name="description" content="{% if seo is defined %}{{ seo.description }}{% else %}{{ descript | default(value='') }}{% endif %}" />
   <script src="/static/frontend/Soft/javascript/jquery.js"></script>
   <script src="/static/frontend/Soft/javascript/jquery.colorbox.js"></script>
   <script src="/static/frontend/Soft/javascript/menu.js"></script>
@@ -43,7 +43,19 @@
           <td id="table-center">
             {{ positions.promoblock | default(value="") | safe }}
             {{ positions.topblock | default(value="") | safe }}
+            {% if seo is defined and seo.breadcrumbs | length > 0 %}
+            <div class="site-title">
+              {% for item in seo.breadcrumbs %}
+                {% if loop.last %}
+                  <span>{{ item.title }}</span>
+                {% else %}
+                  <a href="{{ item.url }}">{{ item.title }}</a> &raquo;
+                {% endif %}
+              {% endfor %}
+            </div>
+            {% else %}
             {{ breadcrumbs | default(value='') | safe }}
+            {% endif %}
 
             <div class="article">
               {% block content %}{% endblock %}

@@ -5,6 +5,7 @@ pub mod models;
 pub mod apanel;
 pub mod blocks;
 pub mod acl;
+pub mod utils;
 
 rust_i18n::i18n!("locales");
 
@@ -48,6 +49,13 @@ pub async fn run() {
         .route("/dashboard", get(apanel::dashboard::render_dashboard))
         .route("/settings", get(apanel::settings::show_settings))
         .route("/settings/save", post(apanel::settings::save_settings))
+        .route("/seo", get(apanel::seo::show_settings))
+        .route("/seo/save", post(apanel::seo::save_settings))
+        .route("/seo/sitemap", get(apanel::seo::show_sitemap))
+        .route("/seo/sitemap/save", post(apanel::seo::save_sitemap))
+        .route("/seo/social", get(apanel::seo::show_social))
+        .route("/seo/social/save", post(apanel::seo::save_social))
+        .route("/seo/social/delete", get(apanel::seo::delete_social))
         .route("/design", get(apanel::design::show_design))
         .route("/design/save", post(apanel::design::save_file))
         .route("/blocks/positions", get(apanel::blocks::list_positions))
@@ -100,6 +108,10 @@ async fn root(State(state): State<Arc<state::AppState>>) -> impl axum::response:
     let mut context = tera::Context::new();
     let settings = state.settings.read().await;
     context.insert("site_name", &settings.site_name);
+    let seo = utils::seo::SeoMeta::new(&settings.site_name)
+        .with_description(&settings.site_name)
+        .with_breadcrumb(&settings.site_name, "/");
+    seo.insert_into_context(&mut context);
     
     // Предварительный рендеринг блоков
     let ctx = Arc::new(crate::blocks::BlockContext {
