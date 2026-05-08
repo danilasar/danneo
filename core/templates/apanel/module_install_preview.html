@@ -1,0 +1,61 @@
+{% extends "apanel/base.html" %}
+{% block content %}
+<div class="top_zag">Предварительный просмотр установки</div>
+
+<div class="content-box">
+    <div style="background: #fff; padding: 20px; border: 1px solid #ddd; border-radius: 5px;">
+        <h2>{{ result.manifest.package.name }} ({{ result.manifest.package.id }})</h2>
+        <p><strong>Версия:</strong> {{ result.manifest.package.version }}</p>
+        {% if result.is_upgrade %}
+            <p style="color: blue;"><strong>ОБНОВЛЕНИЕ:</strong> Текущая установленная версия: {{ result.current_version }}</p>
+        {% endif %}
+        
+        <p><strong>Автор:</strong> {{ result.manifest.package.author | default(value="Неизвестно") }}</p>
+        <p><strong>Описание:</strong> {{ result.manifest.package.description | default(value="Нет описания") }}</p>
+
+        {% if result.issues %}
+            <div style="background: #fff3f3; border: 1px solid #f8d7da; padding: 15px; margin: 15px 0; border-radius: 4px;">
+                <h3 style="color: #721c24; margin-top: 0;">Проблемы при проверке:</h3>
+                <ul style="color: #721c24;">
+                    {% for issue in result.issues %}
+                        <li>{{ issue }}</li>
+                    {% endfor %}
+                </ul>
+                <p><strong>Внимание:</strong> Установка может завершиться ошибкой или привести к нестабильной работе.</p>
+            </div>
+        {% endif %}
+
+        <hr>
+
+        <h3>Что будет установлено:</h3>
+        <ul>
+            {% if result.manifest.entrypoints.entities %}
+                <li>Таблицы базы данных из файла <code>{{ result.manifest.entrypoints.entities }}</code></li>
+            {% endif %}
+            {% if result.manifest.entrypoints.frontend_routes %}
+                <li>Маршруты фронтенда из <code>{{ result.manifest.entrypoints.frontend_routes }}</code></li>
+            {% endif %}
+            {% if result.manifest.entrypoints.admin_routes %}
+                <li>Маршруты админки из <code>{{ result.manifest.entrypoints.admin_routes }}</code></li>
+            {% endif %}
+            {% if result.manifest.entrypoints.hooks %}
+                <li>Скрипты (хуки) из <code>{{ result.manifest.entrypoints.hooks }}</code></li>
+            {% endif %}
+        </ul>
+
+        <hr>
+
+        <form method="POST" action="/admin/modules/install_from_staging">
+            <input type="hidden" name="staging_path" value="{{ result.staging_path }}">
+            <input type="hidden" name="package_id" value="{{ result.manifest.package.id }}">
+            
+            <div style="margin-top: 20px;">
+                <button type="submit" class="button" style="background: green; color: white; padding: 10px 20px; border: none; border-radius: 3px; cursor: pointer;">
+                    {% if result.is_upgrade %}Обновить{% else %}Установить сейчас{% endif %}
+                </button>
+                <a href="/admin/modules" style="margin-left: 10px; color: #666;">Отмена</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
