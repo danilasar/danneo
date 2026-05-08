@@ -6,6 +6,7 @@ pub mod apanel;
 pub mod blocks;
 pub mod acl;
 pub mod utils;
+pub mod registry;
 
 rust_i18n::i18n!("locales");
 
@@ -79,6 +80,7 @@ pub async fn run() {
         .route("/agroups/edit/:id", get(apanel::agroups::edit_group))
         .route("/agroups/save", post(apanel::agroups::save_group))
         .route("/agroups/delete/:id", get(apanel::agroups::delete_group))
+        .route("/modules", get(apanel::modules::list_modules))
         .layer(axum::middleware::from_fn_with_state(app_state.clone(), apanel::middleware::admin_acl_middleware));
 
     let static_dir = if std::path::Path::new("core/static").exists() {

@@ -24,6 +24,8 @@ pub struct AppState {
     pub block_manager: Arc<BlockManager>,
     pub jwt_secret: String,
     pub acl: Arc<AclService>,
+    pub packages: Arc<tokio::sync::RwLock<crate::registry::PackageRegistry>>,
+    pub modules: Arc<tokio::sync::RwLock<crate::registry::ModuleRegistry>>,
 }
 
 impl AppState {
@@ -104,6 +106,24 @@ impl AppState {
         }
         tera.register_function("t", I18nFunction);
 
+        let packages_dir = if std::path::Path::new("core/modules").exists() {
+            "core/modules"
+        } else {
+            "modules"
+        };
+        let blocks_dir = if std::path::Path::new("core/blocks").exists() {
+            "core/blocks"
+        } else {
+            "blocks"
+        };
+        let mut package_registry = crate::registry::PackageRegistry::new(packages_dir, blocks_dir);
+        package_registry.scan();
+        let packages = Arc::new(tokio::sync::RwLock::new(package_registry));
+
+        let module_registry = crate::registry::ModuleRegistry::new(db_arc.clone());
+        module_registry.init().await;
+        let modules = Arc::new(tokio::sync::RwLock::new(module_registry));
+
         Ok(Self {
             db: db_arc,
             settings,
@@ -111,6 +131,8 @@ impl AppState {
             block_manager,
             jwt_secret,
             acl,
+            packages,
+            modules,
         })
     }
 }
