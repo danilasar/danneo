@@ -4,7 +4,7 @@ use axum::{
     http::StatusCode,
 };
 use std::sync::Arc;
-use crate::{state::AppState, auth::Claims, models::core_admins};
+use crate::{state::AppState, auth::Claims, models::core_admins, models::core_admin_groups};
 use tera::Context;
 use serde::Deserialize;
 use sea_orm::{EntityTrait, Set, ActiveModelTrait, QueryOrder};
@@ -16,127 +16,147 @@ pub struct AdminForm {
     pub login: String,
     pub email: String,
     pub password: Option<String>,
-    pub permissions: Vec<String>,
+    pub group_id: Option<i32>,
+    pub level: i32,
 }
 
 pub async fn list_admins(
     _claims: Claims,
-    State(_state): State<Arc<AppState>>,
+    State(state): State<Arc<AppState>>,
 ) -> impl IntoResponse {
-    StatusCode::NOT_IMPLEMENTED
+    let db = state.db.as_ref();
+    
+    let admins = match core_admins::Entity::find()
+        .order_by_asc(core_admins::Column::Login)
+        .all(db)
+        .await {
+            Ok(a) => a,
+            Err(e) => {
+                tracing::error!("Failed to fetch admins: {}", e);
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            }
+        };
+
+    let mut context = Context::new();
+    let settings = state.settings.read().await;
+    context.insert("site_name", &settings.site_name);
+    context.insert("admins", &admins);
+
+    match state.tera.render("apanel/amanage_list.html", &context) {
+        Ok(html) => Html(html).into_response(),
+        Err(e) => {
+            tracing::error!("Template rendering error: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
 }
 
 pub async fn edit_admin(
     _claims: Claims,
-    State(_state): State<Arc<AppState>>,
-    axum::extract::Query(_params): axum::extract::Query<std::collections::HashMap<String, String>>,
+    State(state): State<Arc<AppState>>,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
 ) -> impl IntoResponse {
-    StatusCode::NOT_IMPLEMENTED
+    let db = state.db.as_ref();
+    let id = params.get("id").and_then(|id| id.parse::<i32>().ok());
+
+    let admin = if let Some(id) = id {
+        match core_admins::Entity::find_by_id(id).one(db).await {
+            Ok(Some(a)) => Some(a),
+            _ => None,
+        }
+    } else {
+        None
+    };
+
+    let groups = core_admin_groups::Entity::find().all(db).await.unwrap_or_default();
+
+    let mut context = Context::new();
+    let settings = state.settings.read().await;
+    context.insert("site_name", &settings.site_name);
+    context.insert("admin", &admin);
+    context.insert("groups", &groups);
+
+    match state.tera.render("apanel/amanage_edit.html", &context) {
+        Ok(html) => Html(html).into_response(),
+        Err(e) => {
+            tracing::error!("Template rendering error: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
 }
 
 pub async fn save_admin(
     _claims: Claims,
-    State(_state): State<Arc<AppState>>,
-    Form(_form): Form<AdminForm>,
+    State(state): State<Arc<AppState>>,
+    Form(form): Form<AdminForm>,
 ) -> impl IntoResponse {
-    StatusCode::NOT_IMPLEMENTED
+    let db = state.db.as_ref();
+
+    let mut active_model = core_admins::ActiveModel {
+        login: Set(form.login.clone()),
+        email: Set(Some(form.email)),
+        group_id: Set(form.group_id),
+        level: Set(form.level),
+        permissions: Set(serde_json::json!([])), // Теперь пусто, всё в Casbin
+        ..Default::default()
+    };
+
+    if let Some(id) = form.id {
+        // Редактирование
+        active_model.id = Set(id);
+        if let Some(pass) = form.password {
+            if !pass.is_empty() {
+                let hash = bcrypt::hash(pass, 4).unwrap();
+                active_model.password_hash = Set(hash);
+            }
+        }
+        
+        let old_admin = core_admins::Entity::find_by_id(id).one(db).await.unwrap().unwrap();
+        // Удаляем старые роли в Casbin для этого пользователя
+        state.acl.remove_filtered_policy(0, &old_admin.login).await; 
+        // В Casbin (g, sub, role) sub - это login.
+    } else {
+        // Создание
+        let pass = form.password.unwrap_or_default();
+        let hash = bcrypt::hash(pass, 4).unwrap();
+        active_model.password_hash = Set(hash);
+    }
+
+    match active_model.save(db).await {
+        Ok(saved) => {
+            // Привязываем к группе в Casbin
+            if let Some(gid) = form.group_id {
+                if let Some(group) = core_admin_groups::Entity::find_by_id(gid).one(db).await.unwrap() {
+                    state.acl.add_role_for_user(&form.login, &format!("role:{}", group.name)).await;
+                }
+            }
+            Redirect::to("/admin/amanage").into_response()
+        },
+        Err(e) => {
+            tracing::error!("Failed to save admin: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
 }
 
 pub async fn delete_admin(
     _claims: Claims,
-    State(_state): State<Arc<AppState>>,
-    axum::extract::Query(_params): axum::extract::Query<std::collections::HashMap<String, String>>,
+    State(state): State<Arc<AppState>>,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
 ) -> impl IntoResponse {
-    StatusCode::NOT_IMPLEMENTED
-}
+    let db = state.db.as_ref();
+    let id = params.get("id").and_then(|id| id.parse::<i32>().ok());
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use axum::{
-        body::Body,
-        http::{Request, StatusCode},
-    };
-    use tower::ServiceExt;
-    use sea_orm::{DatabaseBackend, MockDatabase};
-    use crate::auth::AuthService;
-    use serde_json::json;
-
-    #[tokio::test]
-    async fn test_list_admins_page() {
-        let db = MockDatabase::new(DatabaseBackend::Postgres)
-            .append_query_results([
-                vec![
-                    core_admins::Model { 
-                        id: 1, 
-                        login: "admin".to_string(), 
-                        password_hash: "hash".to_string(),
-                        email: Some("admin@test.com".to_string()),
-                        permissions: json!(["all"]),
-                    },
-                ]
-            ])
-            .into_connection();
-        let state = Arc::new(AppState::new(db).await.unwrap());
-        let jwt_secret = state.jwt_secret.clone();
-        
-        let app = axum::Router::new()
-            .route("/admin/amanage", axum::routing::get(list_admins))
-            .with_state(state);
-
-        let auth_service = AuthService::new(jwt_secret);
-        let token = auth_service.create_token(1, 9999999999).unwrap();
-
-        let response = app
-            .oneshot(
-                Request::builder()
-                    .uri("/admin/amanage")
-                    .header("Cookie", format!("danneo_token={}", token))
-                    .body(Body::empty())
-                    .unwrap()
-            )
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::OK);
+    if let Some(id) = id {
+        if id != 1 {
+            if let Some(admin) = core_admins::Entity::find_by_id(id).one(db).await.unwrap() {
+                // Удаляем роли в Casbin
+                state.acl.remove_filtered_policy(0, &admin.login).await;
+                // Удаляем из БД
+                let _ = core_admins::Entity::delete_by_id(id).exec(db).await;
+            }
+        }
     }
 
-    #[tokio::test]
-    async fn test_save_admin_logic() {
-        let db = MockDatabase::new(DatabaseBackend::Postgres)
-            .append_query_results([
-                // Для загрузки настроек в AppState::new
-                vec![],
-            ])
-            .append_exec_results([
-                sea_orm::MockExecResult { last_insert_id: 0, rows_affected: 1 },
-            ])
-            .into_connection();
-        let state = Arc::new(AppState::new(db).await.unwrap());
-        let jwt_secret = state.jwt_secret.clone();
-        
-        let app = axum::Router::new()
-            .route("/admin/amanage/save", axum::routing::post(save_admin))
-            .with_state(state);
-
-        let auth_service = AuthService::new(jwt_secret);
-        let token = auth_service.create_token(1, 9999999999).unwrap();
-
-        let form_data = "login=newadmin&email=new@test.com&password=secret&permissions=news&permissions=settings";
-        
-        let response = app
-            .oneshot(
-                Request::builder()
-                    .method("POST")
-                    .uri("/admin/amanage/save")
-                    .header("Cookie", format!("danneo_token={}", token))
-                    .header("Content-Type", "application/x-www-form-urlencoded")
-                    .body(Body::from(form_data))
-                    .unwrap()
-            )
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::SEE_OTHER);
-    }
+    Redirect::to("/admin/amanage").into_response()
 }

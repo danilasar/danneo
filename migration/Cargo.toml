@@ -8,3 +8,4 @@ async-trait.workspace = true
 sea-orm-migration.workspace = true
 tokio.workspace = true
 bcrypt.workspace = true
+serde_json.workspace = true

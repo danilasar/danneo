@@ -21,7 +21,7 @@ impl MigrationTrait for Migration {
                         ColumnDef::new(CoreAdmins::Permissions)
                             .json()
                             .not_null()
-                            .default("[]"),
+                            .default(Expr::value(serde_json::json!([]))),
                     )
                     .to_owned(),
             )
@@ -32,7 +32,7 @@ impl MigrationTrait for Migration {
         let update_admin = Query::update()
             .table(CoreAdmins::Table)
             .values([
-                (CoreAdmins::Permissions, "[\"all\"]".into()),
+                (CoreAdmins::Permissions, Expr::value(serde_json::json!(["all"]))),
             ])
             .and_where(Expr::col(CoreAdmins::Id).eq(1))
             .to_owned();

@@ -4,6 +4,7 @@ pub mod state;
 pub mod models;
 pub mod apanel;
 pub mod blocks;
+pub mod acl;
 
 use axum::{
     routing::{get, post},
@@ -37,33 +38,41 @@ pub async fn run() {
     let app_state = Arc::new(state::AppState::new(db).await.expect("Failed to initialize AppState"));
 
     // Настройка роутера
+    let admin_routes = Router::new()
+        .route("/dashboard", get(apanel::dashboard::render_dashboard))
+        .route("/settings", get(apanel::settings::show_settings))
+        .route("/settings/save", post(apanel::settings::save_settings))
+        .route("/design", get(apanel::design::show_design))
+        .route("/design/save", post(apanel::design::save_file))
+        .route("/blocks/positions", get(apanel::blocks::list_positions))
+        .route("/blocks/positions/save", post(apanel::blocks::save_position))
+        .route("/blocks/positions/delete", get(apanel::blocks::delete_position))
+        .route("/blocks", get(apanel::blocks::list_blocks))
+        .route("/blocks/edit", get(apanel::blocks::edit_block))
+        .route("/blocks/save", post(apanel::blocks::save_block))
+        .route("/blocks/delete", get(apanel::blocks::delete_block))
+        .route("/menu", get(apanel::menu::list_groups))
+        .route("/menu/group/save", post(apanel::menu::save_group))
+        .route("/menu/group/delete", get(apanel::menu::delete_group))
+        .route("/menu/items", get(apanel::menu::list_items))
+        .route("/menu/item/save", post(apanel::menu::save_item))
+        .route("/menu/item/delete", get(apanel::menu::delete_item))
+        .route("/amanage", get(apanel::amanage::list_admins))
+        .route("/amanage/edit", get(apanel::amanage::edit_admin))
+        .route("/amanage/save", post(apanel::amanage::save_admin))
+        .route("/amanage/delete", get(apanel::amanage::delete_admin))
+        .route("/agroups", get(apanel::agroups::list_groups))
+        .route("/agroups/edit/:id", get(apanel::agroups::edit_group))
+        .route("/agroups/save", post(apanel::agroups::save_group))
+        .route("/agroups/delete/:id", get(apanel::agroups::delete_group))
+        .layer(axum::middleware::from_fn_with_state(app_state.clone(), apanel::middleware::admin_acl_middleware));
+
     let app = Router::new()
         .route("/", get(root))
         .route("/admin/login", get(auth::show_login_page))
         .route("/api/admin/login", post(auth::admin_login))
-        .route("/admin/dashboard", get(apanel::dashboard::render_dashboard))
-        .route("/admin/settings", get(apanel::settings::show_settings))
-        .route("/admin/settings/save", post(apanel::settings::save_settings))
-        .route("/admin/design", get(apanel::design::show_design))
-        .route("/admin/design/save", post(apanel::design::save_file))
-        .route("/admin/blocks/positions", get(apanel::blocks::list_positions))
-        .route("/admin/blocks/positions/save", post(apanel::blocks::save_position))
-        .route("/admin/blocks/positions/delete", get(apanel::blocks::delete_position))
-        .route("/admin/blocks", get(apanel::blocks::list_blocks))
-        .route("/admin/blocks/edit", get(apanel::blocks::edit_block))
-        .route("/admin/blocks/save", post(apanel::blocks::save_block))
-        .route("/admin/blocks/delete", get(apanel::blocks::delete_block))
-        .route("/admin/menu", get(apanel::menu::list_groups))
-        .route("/admin/menu/group/save", post(apanel::menu::save_group))
-        .route("/admin/menu/group/delete", get(apanel::menu::delete_group))
-        .route("/admin/menu/items", get(apanel::menu::list_items))
-        .route("/admin/menu/item/save", post(apanel::menu::save_item))
-        .route("/admin/menu/item/delete", get(apanel::menu::delete_item))
-        .route("/admin/amanage", get(apanel::amanage::list_admins))
-        .route("/admin/amanage/edit", get(apanel::amanage::edit_admin))
-        .route("/admin/amanage/save", post(apanel::amanage::save_admin))
-        .route("/admin/amanage/delete", get(apanel::amanage::delete_admin))
-        .nest_service("/static", tower_http::services::ServeDir::new("core/static"))
+        .nest("/admin", admin_routes)
+        .nest_service("/static", tower_http::services::ServeDir::new("./static"))
         .with_state(app_state);
 
     // Запуск сервера

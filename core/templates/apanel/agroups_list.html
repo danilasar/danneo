@@ -1,0 +1,30 @@
+{% extends "apanel/base.html" %}
+
+{% block content %}
+<div class="section">
+    <div style="margin-bottom:10px;">
+        <a href="/admin/agroups/edit/0" class="interface">Добавить новую группу</a>
+    </div>
+
+    <table class="work">
+        <caption>Группы администраторов</caption>
+        <tr>
+            <th class="w-16">ID</th>
+            <th>Название</th>
+            <th class="ac">Уровень (MAC)</th>
+            <th class="ac">Действие</th>
+        </tr>
+        {% for group in groups %}
+        <tr>
+            <td class="ac">{{ group.id }}</td>
+            <td class="al"><strong>{{ group.name }}</strong></td>
+            <td class="ac">{{ group.level }}</td>
+            <td class="ac">
+                <a href="/admin/agroups/edit/{{ group.id }}">Изменить</a> |
+                <a href="/admin/agroups/delete/{{ group.id }}" onclick="return confirm('Удалить группу?')">Удалить</a>
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+</div>
+{% endblock %}

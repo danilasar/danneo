@@ -192,24 +192,26 @@ mod tests {
 
     #[tokio::test]
     async fn test_admin_login_success() {
-        use sea_orm::{DatabaseBackend, MockDatabase};
+        use sea_orm::{DatabaseBackend, MockDatabase, Value};
         use crate::models::core_admins;
+        use std::collections::BTreeMap;
         
         let password = "my_secure_password";
         let password_hash = bcrypt::hash(password, 4).unwrap();
 
+        let mut row = BTreeMap::new();
+        row.insert("id".to_string(), Value::Int(Some(1)));
+        row.insert("login".to_string(), Value::String(Some(Box::new("admin".to_string()))));
+        row.insert("password_hash".to_string(), Value::String(Some(Box::new(password_hash.clone()))));
+        row.insert("email".to_string(), Value::String(Some(Box::new("admin@test.com".to_string()))));
+        row.insert("permissions".to_string(), Value::Json(Some(Box::new(serde_json::json!(["all"])))));
+
         // Мокаем базу данных для возврата админа
         let db = MockDatabase::new(DatabaseBackend::Postgres)
             // Возвращаем пустые настройки для AppState::new
-            .append_query_results([Vec::<crate::models::core_settings::Model>::new()])
+            .append_query_results([Vec::<BTreeMap<String, Value>>::new()])
             // Возвращаем админа при запросе admin_login
-            .append_query_results([vec![
-                core_admins::Model {
-                    id: 1,
-                    login: "admin".to_string(),
-                    password_hash,
-                }
-            ]])
+            .append_query_results([vec![row]])
             .into_connection();
 
         let state = Arc::new(AppState::new(db).await.unwrap());

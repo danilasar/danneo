@@ -20,4 +20,10 @@ bcrypt.workspace = true
 chrono.workspace = true
 dotenvy.workspace = true
 tower.workspace = true
+casbin.workspace = true
+sea-orm-adapter.workspace = true
+rhai = "1.0"
 migration = { path = "../migration" }
+
+[dev-dependencies]
+tempfile.workspace = true

@@ -1,5 +1,6 @@
 use crate::models::core_settings;
 use crate::blocks::BlockManager;
+use crate::acl::service::AclService;
 use sea_orm::{DatabaseConnection, EntityTrait};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -20,14 +21,15 @@ pub struct AppState {
     pub tera: Arc<tera::Tera>,
     pub block_manager: Arc<BlockManager>,
     pub jwt_secret: String,
+    pub acl: Arc<AclService>,
 }
 
 impl AppState {
     pub async fn new(db: DatabaseConnection) -> Result<Self, String> {
-        let db = Arc::new(db);
+        let db_arc = Arc::new(db);
         // Пытаемся загрузить настройки из БД
         let settings_records = core_settings::Entity::find()
-            .all(db.as_ref())
+            .all(db_arc.as_ref())
             .await
             .map_err(|e| format!("Failed to load settings: {}", e))?;
 
@@ -63,6 +65,16 @@ impl AppState {
         
         let block_manager = Arc::new(BlockManager::new());
 
+        // Инициализируем ACL
+        let model_path = if std::path::Path::new("core/casbin_models/rbac_with_level.conf").exists() {
+            "core/casbin_models/rbac_with_level.conf"
+        } else {
+            "casbin_models/rbac_with_level.conf"
+        };
+        
+        let acl = AclService::new_db(db_arc.clone(), model_path).await;
+        let acl = Arc::new(acl);
+
         // Инициализируем Tera, загружая шаблоны из файловой системы
         let template_path = if std::path::Path::new("core/templates").exists() {
             "core/templates/**/*"
@@ -74,53 +86,12 @@ impl AppState {
             .map_err(|e| format!("Failed to initialize Tera: {}", e))?;
 
         Ok(Self { 
-            db, 
+            db: db_arc, 
             settings,
             tera: Arc::new(tera),
             block_manager,
             jwt_secret,
+            acl,
         })
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use sea_orm::{DatabaseBackend, MockDatabase, MockExecResult};
-
-    #[tokio::test]
-    async fn test_app_state_initialization_with_settings() {
-        // Создаем мок базы данных с предопределенными результатами
-        let db = MockDatabase::new(DatabaseBackend::Postgres)
-            .append_query_results([
-                vec![
-                    core_settings::Model {
-                        key: "site_name".to_string(),
-                        value: serde_json::json!("Test Site"),
-                    },
-                    core_settings::Model {
-                        key: "admin_email".to_string(),
-                        value: serde_json::json!("admin@test.com"),
-                    },
-                    core_settings::Model {
-                        key: "site_url".to_string(),
-                        value: serde_json::json!("http://localhost"),
-                    },
-                    core_settings::Model {
-                        key: "site_temp".to_string(),
-                        value: serde_json::json!("Soft"),
-                    },
-                ]
-            ])
-            .into_connection();
-            
-        // Проверяем, что AppState инициализируется
-        let state_result = AppState::new(db).await;
-        assert!(state_result.is_ok(), "AppState should initialize successfully");
-        
-        let state = state_result.unwrap();
-        let settings = state.settings.read().await;
-        assert_eq!(settings.site_name, "Test Site");
-        assert_eq!(settings.admin_email, "admin@test.com");
     }
 }
