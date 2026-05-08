@@ -6,6 +6,8 @@ use serde_json::Value;
 use crate::models::core_blocks;
 use sea_orm::{DatabaseConnection, EntityTrait, QueryOrder, ColumnTrait, QueryFilter};
 
+pub mod menu;
+
 /// Контекст для рендеринга блоков (без Tera, чтобы избежать циклов)
 pub struct BlockContext {
     pub db: Arc<DatabaseConnection>,
@@ -24,9 +26,12 @@ pub struct BlockManager {
 
 impl BlockManager {
     pub fn new() -> Self {
-        Self {
+        let mut manager = Self {
             registry: std::collections::HashMap::new(),
-        }
+        };
+        manager.register(Box::new(SampleBlock));
+        manager.register(Box::new(menu::MenuBlock));
+        manager
     }
 
     pub fn register(&mut self, block: Box<dyn DanneoBlock>) {

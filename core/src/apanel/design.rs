@@ -28,7 +28,8 @@ pub async fn show_design(
     // Читаем index.html
     let index_path = format!("core/templates/frontend/{}/index.html", theme);
     let index_content = std::fs::read_to_string(&index_path).unwrap_or_else(|_| "<!-- Шаблон не найден -->".to_string());
-    context.insert("index_html_content_json", &serde_json::to_string(&index_content).unwrap());
+    let index_json = serde_json::to_string(&index_content).unwrap().replace("</script>", "<\\/script>");
+    context.insert("index_html_content_json", &index_json);
     context.insert("initial_content", &index_content);
 
     // Читаем screen.css

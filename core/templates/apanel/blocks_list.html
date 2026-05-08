@@ -1,0 +1,46 @@
+{% extends "apanel/base.html" %}
+
+{% block content %}
+<div class="section">
+    <div style="margin-bottom:10px;">
+        <a href="/admin/blocks/edit" class="interface">Добавить новый блок</a>
+        <a href="/admin/blocks/positions" class="interface">Управление позициями</a>
+    </div>
+
+    <table class="work">
+        <caption>Список установленных блоков</caption>
+        <tr>
+            <th>Позиция / Название блока</th>
+            <th>Файл логики</th>
+            <th>Активен</th>
+            <th>Вес</th>
+            <th>Действие</th>
+        </tr>
+        {% for pos in positions %}
+        <tr style="background:#f0f0f0;">
+            <td colspan="5"><strong>Позиция: {{ pos.positname }} ({{ pos.positcode }})</strong></td>
+        </tr>
+            {% for block in blocks %}
+                {% if block.positcode == pos.positcode %}
+                <tr>
+                    <td class="al" style="padding-left:20px;">{{ block.block_name }}</td>
+                    <td class="ac"><code>{{ block.block_file }}</code></td>
+                    <td class="ac">
+                        {% if block.block_active %}
+                            <span style="color:green;">Да</span>
+                        {% else %}
+                            <span style="color:red;">Нет</span>
+                        {% endif %}
+                    </td>
+                    <td class="ac">{{ block.block_weight }}</td>
+                    <td class="ac">
+                        <a href="/admin/blocks/edit?id={{ block.id }}">Изменить</a> |
+                        <a href="/admin/blocks/delete?id={{ block.id }}" onclick="return confirm('Удалить блок?')">Удалить</a>
+                    </td>
+                </tr>
+                {% endif %}
+            {% endfor %}
+        {% endfor %}
+    </table>
+</div>
+{% endblock %}

@@ -1,0 +1,70 @@
+{% extends "apanel/base.html" %}
+
+{% block content %}
+<div class="section">
+    <form action="/admin/blocks/save" method="post">
+        {% if block %}
+            <input type="hidden" name="id" value="{{ block.id }}">
+        {% endif %}
+        
+        <table class="work">
+            <caption>{% if block %}Редактирование блока: {{ block.block_name }}{% else %}Добавление нового блока{% endif %}</caption>
+            
+            <tr>
+                <td class="ar" style="width:30%">Название блока:</td>
+                <td class="al"><input type="text" name="block_name" value="{{ block.block_name | default(value='') }}" size="50" required></td>
+            </tr>
+
+            <tr>
+                <td class="ar">Файл логики:</td>
+                <td class="al">
+                    <select name="block_file">
+                        {% for file in block_files %}
+                        <option value="{{ file }}" {% if block and block.block_file == file %}selected{% endif %}>{{ file }}</option>
+                        {% endfor %}
+                    </select>
+                </td>
+            </tr>
+
+            <tr>
+                <td class="ar">Позиция:</td>
+                <td class="al">
+                    <select name="positcode">
+                        {% for pos in positions %}
+                        <option value="{{ pos.positcode }}" {% if block and block.positcode == pos.positcode %}selected{% endif %}>{{ pos.positname }} ({{ pos.positcode }})</option>
+                        {% endfor %}
+                    </select>
+                </td>
+            </tr>
+
+            <tr>
+                <td class="ar">Активен:</td>
+                <td class="al">
+                    <input type="checkbox" name="block_active" value="true" {% if block and block.block_active %}checked{% endif %}>
+                </td>
+            </tr>
+
+            <tr>
+                <td class="ar">Вес (сортировка):</td>
+                <td class="al"><input type="number" name="block_weight" value="{{ block.block_weight | default(value=0) }}" size="10"></td>
+            </tr>
+
+            <tr>
+                <td class="ar">Индивидуальные настройки (JSON):</td>
+                <td class="al">
+                    <textarea name="block_setting" cols="50" rows="5">{{ block.block_setting | default(value='{}') | json_encode }}</textarea>
+                    <br><small>Настройки специфичные для выбранного файла логики</small>
+                </td>
+            </tr>
+
+            <tr>
+                <td class="ar">&nbsp;</td>
+                <td class="al">
+                    <input type="submit" class="but" value="Сохранить блок">
+                    <a href="/admin/blocks" class="interface" style="margin-left:10px;">Отмена</a>
+                </td>
+            </tr>
+        </table>
+    </form>
+</div>
+{% endblock %}

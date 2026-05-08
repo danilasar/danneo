@@ -46,6 +46,23 @@ pub async fn run() {
         .route("/admin/settings/save", post(apanel::settings::save_settings))
         .route("/admin/design", get(apanel::design::show_design))
         .route("/admin/design/save", post(apanel::design::save_file))
+        .route("/admin/blocks/positions", get(apanel::blocks::list_positions))
+        .route("/admin/blocks/positions/save", post(apanel::blocks::save_position))
+        .route("/admin/blocks/positions/delete", get(apanel::blocks::delete_position))
+        .route("/admin/blocks", get(apanel::blocks::list_blocks))
+        .route("/admin/blocks/edit", get(apanel::blocks::edit_block))
+        .route("/admin/blocks/save", post(apanel::blocks::save_block))
+        .route("/admin/blocks/delete", get(apanel::blocks::delete_block))
+        .route("/admin/menu", get(apanel::menu::list_groups))
+        .route("/admin/menu/group/save", post(apanel::menu::save_group))
+        .route("/admin/menu/group/delete", get(apanel::menu::delete_group))
+        .route("/admin/menu/items", get(apanel::menu::list_items))
+        .route("/admin/menu/item/save", post(apanel::menu::save_item))
+        .route("/admin/menu/item/delete", get(apanel::menu::delete_item))
+        .route("/admin/amanage", get(apanel::amanage::list_admins))
+        .route("/admin/amanage/edit", get(apanel::amanage::edit_admin))
+        .route("/admin/amanage/save", post(apanel::amanage::save_admin))
+        .route("/admin/amanage/delete", get(apanel::amanage::delete_admin))
         .nest_service("/static", tower_http::services::ServeDir::new("core/static"))
         .with_state(app_state);
 
@@ -71,6 +88,12 @@ async fn root(State(state): State<Arc<state::AppState>>) -> impl axum::response:
     
     let positions = state.block_manager.get_all_positions_html(ctx).await;
     context.insert("positions", &positions);
+
+    // Рендерим меню
+    let top_menu = crate::blocks::menu::render_menu(state.db.as_ref(), "top_menu").await;
+    let bot_menu = crate::blocks::menu::render_menu(state.db.as_ref(), "bot_menu").await;
+    context.insert("top_menu", &top_menu);
+    context.insert("bot_menu", &bot_menu);
     
     let template_name = format!("frontend/{}/index.html", settings.site_temp);
     

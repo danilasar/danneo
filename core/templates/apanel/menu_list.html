@@ -1,0 +1,76 @@
+{% extends "apanel/base.html" %}
+
+{% block content %}
+<div class="section">
+    <!-- Список групп меню -->
+    <table class="work">
+        <caption>Управление группами меню</caption>
+        <tr>
+            <th>ID</th>
+            <th>Название группы</th>
+            <th>Код (ID)</th>
+            <th>Действие</th>
+        </tr>
+        {% for group in groups %}
+        <tr>
+            <td class="ac">{{ group.id }}</td>
+            <td class="al">
+                <strong><a href="/admin/menu/items?group_id={{ group.id }}">{{ group.title }}</a></strong>
+            </td>
+            <td class="ac"><code>{{ group.code }}</code></td>
+            <td class="ac">
+                <a href="javascript:void(0)" class="edit-link" data-json='{{ group | json_encode | safe }}' onclick="edit_group(this)">Изменить</a> |
+                <a href="/admin/menu/group/delete?id={{ group.id }}" onclick="return confirm('Удалить группу и все её пункты?')">Удалить</a>
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+
+    <br>
+
+    <!-- Форма добавления/редактирования группы -->
+    <form action="/admin/menu/group/save" method="post" name="groupform">
+        <input type="hidden" name="id" id="group_id">
+        <table class="work">
+            <caption id="form_caption">Добавить новую группу</caption>
+            <tr>
+                <td class="ar" style="width:30%">Название группы:</td>
+                <td class="al">
+                    <input type="text" name="title" id="group_title" size="40" required>
+                </td>
+            </tr>
+            <tr>
+                <td class="ar">Уникальный код (ID):</td>
+                <td class="al">
+                    <input type="text" name="code" id="group_code" size="40" required>
+                    <br><small>Например: top_menu, footer_links</small>
+                </td>
+            </tr>
+            <tr>
+                <td class="ar">&nbsp;</td>
+                <td class="al">
+                    <input type="submit" class="but" value="Сохранить">
+                    <input type="button" class="but" value="Сброс" onclick="reset_form()">
+                </td>
+            </tr>
+        </table>
+    </form>
+</div>
+
+<script>
+function edit_group(el) {
+    const group = JSON.parse(el.getAttribute('data-json'));
+    document.getElementById('group_id').value = group.id;
+    document.getElementById('group_title').value = group.title;
+    document.getElementById('group_code').value = group.code;
+    document.getElementById('form_caption').innerText = "Редактировать группу: " + group.title;
+}
+
+function reset_form() {
+    document.getElementById('group_id').value = "";
+    document.getElementById('group_title').value = "";
+    document.getElementById('group_code').value = "";
+    document.getElementById('form_caption').innerText = "Добавить новую группу";
+}
+</script>
+{% endblock %}

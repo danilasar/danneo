@@ -61,10 +61,7 @@ impl AppState {
 
         let jwt_secret = std::env::var("JWT_SECRET").unwrap_or_else(|_| "super_secret_key".to_string());
         
-        let mut block_manager = BlockManager::new();
-        // Регистрируем тестовый блок
-        block_manager.register(Box::new(crate::blocks::SampleBlock));
-        let block_manager = Arc::new(block_manager);
+        let block_manager = Arc::new(BlockManager::new());
 
         // Инициализируем Tera, загружая шаблоны из файловой системы
         let template_path = if std::path::Path::new("core/templates").exists() {

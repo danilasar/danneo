@@ -1,14 +1,15 @@
 <!DOCTYPE html>
 <html lang="ru">
+
 <head>
     <meta charset="UTF-8">
-    <title>NeoDanneo APanel - {{ site_name }}</title>
+    <title>Danneo APanel - {{ site_name }}</title>
     <link rel="stylesheet" href="/static/apanel/css/template.css">
     <link rel="stylesheet" href="/static/apanel/css/filebrowser.css">
     <link rel="stylesheet" href="/static/apanel/css/calendar/calendar.css" />
     <link rel="stylesheet" href="/static/apanel/css/colorbox/colorbox.css" />
     <link rel="stylesheet" href="/static/apanel/css/colorpicker.css" />
-    
+
     <script src="/static/apanel/javascript/jquery.js"></script>
     <script src="/static/apanel/javascript/script.js"></script>
     <script src="/static/apanel/javascript/jquery.apanel.js"></script>
@@ -17,22 +18,23 @@
     <script src="/static/apanel/javascript/jquery.colorpicker.js"></script>
     <script src="/static/apanel/javascript/calendar/calendar.js"></script>
     <script>
-        $(function(){
+        $(function () {
             $.template = "Old";
-            $.errors   = "Ошибка";
+            $.errors = "Ошибка";
             $.system();
-            
-            $("#menu-toggle").click(function() {
+
+            $("#menu-toggle").click(function () {
                 $("#aside").toggle();
-                if($("#aside").is(":hidden")){   
-                    $("#menup").attr({src:"/static/apanel/images/open.gif"});  
-                } else {  
-                    $("#menup").attr({src:"/static/apanel/images/closed.gif"});
+                if ($("#aside").is(":hidden")) {
+                    $("#menup").attr({ src: "/static/apanel/images/open.gif" });
+                } else {
+                    $("#menup").attr({ src: "/static/apanel/images/closed.gif" });
                 }
             });
         });
     </script>
 </head>
+
 <body>
     <div id="wrapper">
         <div id="header">
@@ -80,6 +82,8 @@
                             <div class="mcont" style="display:none">
                                 <a class="interface" href="/admin/settings">Глобальные настройки</a>
                                 <a class="interface" href="/admin/design">Управление оформлением</a>
+                                <a class="interface" href="/admin/blocks">Управление блоками</a>
+                                <a class="interface" href="/admin/menu">Управление меню</a>
                             </div>
                         </div>
                     </td>
@@ -96,7 +100,7 @@
         </div>
         <div id="footer">
             <a class="up" href="#" onclick="window.scrollTo(0,0); return false;">&#9650;</a>
-            <div>Powered by <a href="http://www.danneo.com/" target="_blank">NeoDanneo</a> 2.0 (Rust) &copy; 2026</div>
+            <div>Powered by <a href="http://www.danneo.com/" target="_blank">Danneo</a> 2.0 (Rust) &copy; 2026</div>
         </div>
     </div>
 
@@ -108,4 +112,5 @@
         }
     </script>
 </body>
+
 </html>
