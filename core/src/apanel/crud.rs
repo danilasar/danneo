@@ -163,17 +163,46 @@ pub async fn save_handle(
     let schema: crate::crud::EntitySchema = serde_json::from_value(entity_meta.schema.clone()).unwrap();
     let primary_key = schema.fields.iter().find(|f| f.primary_key.unwrap_or(false)).map(|f| f.name.clone()).unwrap_or_default();
 
-    let id_val = payload.get(&primary_key).and_then(|v| v.as_str().map(|s| s.to_string())).or_else(|| payload.get(&primary_key).and_then(|v| v.as_i64().map(|i| i.to_string())));
+    let mut payload_val = payload;
+
+    // --- HOOK: before_save ---
+    let arg = script_rhai::serde::to_dynamic(json!({
+        "entity": entity,
+        "data": payload_val
+    })).unwrap_or(script_rhai::Dynamic::UNIT);
+
+    if let Ok(res) = state.script_engine.call_hook(&module, "before_save", arg).await {
+        // Если скрипт вернул данные, используем их
+        if let Ok(new_data) = script_rhai::serde::from_dynamic::<serde_json::Value>(&res) {
+             if let Some(d) = new_data.get("data") {
+                 payload_val = d.clone();
+             }
+        }
+    } else {
+        // Если скрипт вернул ошибку, можно прервать сохранение
+        // tracing::warn!("Hook before_save returned error or not found");
+    }
+
+    let id_val = payload_val.get(&primary_key).and_then(|v| v.as_str().map(|s| s.to_string())).or_else(|| payload_val.get(&primary_key).and_then(|v| v.as_i64().map(|i| i.to_string())));
 
     let res = if let Some(id) = id_val {
         if id.is_empty() {
-             crate::crud::insert_record(db, &entity_meta.table_name, &payload).await
+             crate::crud::insert_record(db, &entity_meta.table_name, &payload_val).await
         } else {
-             crate::crud::update_record(db, &entity_meta.table_name, &primary_key, &id, &payload).await
+             crate::crud::update_record(db, &entity_meta.table_name, &primary_key, &id, &payload_val).await
         }
     } else {
-        crate::crud::insert_record(db, &entity_meta.table_name, &payload).await
+        crate::crud::insert_record(db, &entity_meta.table_name, &payload_val).await
     };
+
+    if res.is_ok() {
+        // --- HOOK: after_save ---
+        let arg_after = script_rhai::serde::to_dynamic(json!({
+            "entity": entity,
+            "data": payload_val
+        })).unwrap_or(script_rhai::Dynamic::UNIT);
+        let _ = state.script_engine.call_hook(&module, "after_save", arg_after).await;
+    }
 
     match res {
         Ok(_) => axum::response::Redirect::to(&format!("/admin/crud/{}/{}/list", module, entity)).into_response(),

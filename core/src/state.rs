@@ -25,11 +25,13 @@ pub struct AppState {
     pub acl: Arc<AclService>,
     pub packages: Arc<tokio::sync::RwLock<crate::registry::PackageRegistry>>,
     pub modules: Arc<tokio::sync::RwLock<crate::registry::ModuleRegistry>>,
+    pub script_engine: Arc<crate::registry::ScriptEngine>,
 }
 
 impl AppState {
     pub async fn new(db: DatabaseConnection) -> Result<Self, String> {
         let db_arc = Arc::new(db);
+        let script_engine = Arc::new(crate::registry::ScriptEngine::new());
         // Пытаемся загрузить настройки из БД
         let settings_records = core_settings::Entity::find()
             .all(db_arc.as_ref())
@@ -119,7 +121,7 @@ impl AppState {
         let packages = Arc::new(tokio::sync::RwLock::new(package_registry));
 
         let module_registry = crate::registry::ModuleRegistry::new(db_arc.clone());
-        module_registry.init().await;
+        module_registry.init(script_engine.clone(), std::path::PathBuf::from(packages_dir)).await;
         let modules = Arc::new(tokio::sync::RwLock::new(module_registry));
 
         let block_registry = crate::registry::BlockRegistry::new(db_arc.clone());
@@ -135,6 +137,7 @@ impl AppState {
             acl,
             packages,
             modules,
+            script_engine,
         })
     }
 }

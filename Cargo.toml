@@ -27,4 +27,8 @@ tempfile = "3.10"
 rust-i18n = "3.0"
 slug = "0.1"
 toml = "0.8"
-
+thiserror = "1.0"
+# Casbin depends on crates.io Rhai with restrictive features (`no_function`,
+# `no_module`, `only_i32`, ...). Keep the module scripting runtime on a
+# separate package source so Cargo does not unify those features into it.
+script-rhai = { package = "rhai", git = "https://github.com/rhaiscript/rhai", branch = "main", features = ["serde", "sync"] }

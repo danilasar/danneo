@@ -22,6 +22,24 @@ pub struct FieldSchema {
     pub label: Option<String>,
 }
 
+fn row_value(row: &sea_orm::QueryResult, col: &str) -> Value {
+    if let Ok(Some(value)) = row.try_get::<Option<String>>("", col) {
+        return Value::String(value);
+    }
+    if let Ok(Some(value)) = row.try_get::<Option<bool>>("", col) {
+        return Value::Bool(value);
+    }
+    if let Ok(Some(value)) = row.try_get::<Option<i64>>("", col) {
+        return Value::Number(value.into());
+    }
+    if let Ok(Some(value)) = row.try_get::<Option<f64>>("", col) {
+        if let Some(number) = serde_json::Number::from_f64(value) {
+            return Value::Number(number);
+        }
+    }
+    Value::Null
+}
+
 fn build_create_table(schema: &EntitySchema) -> TableCreateStatement {
     let mut table = Table::create();
     table
@@ -163,8 +181,7 @@ pub async fn select_all(db: &DatabaseConnection, table: &str, columns: &[String]
     for row in rows {
         let mut map = serde_json::Map::new();
         for col in columns {
-            let val: serde_json::Value = row.try_get("", col).unwrap_or(serde_json::Value::Null);
-            map.insert(col.clone(), val);
+            map.insert(col.clone(), row_value(&row, col));
         }
         results.push(Value::Object(map));
     }
@@ -189,8 +206,7 @@ pub async fn select_by_pk(db: &DatabaseConnection, table: &str, columns: &[Strin
     if let Some(row) = row {
         let mut map = serde_json::Map::new();
         for col in columns {
-            let val: serde_json::Value = row.try_get("", col).unwrap_or(serde_json::Value::Null);
-            map.insert(col.clone(), val);
+            map.insert(col.clone(), row_value(&row, col));
         }
         Ok(Some(Value::Object(map)))
     } else {

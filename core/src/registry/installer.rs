@@ -1,18 +1,20 @@
-use crate::registry::PackageRegistry;
+use crate::registry::{PackageRegistry, ScriptEngine};
 use sea_orm::{ActiveModelTrait, DatabaseConnection, Set};
 use std::sync::Arc;
 
 pub struct PackageInstaller {
     db: Arc<DatabaseConnection>,
     registry: Arc<tokio::sync::RwLock<PackageRegistry>>,
+    script_engine: Arc<ScriptEngine>,
 }
 
 impl PackageInstaller {
     pub fn new(
         db: Arc<DatabaseConnection>,
         registry: Arc<tokio::sync::RwLock<PackageRegistry>>,
+        script_engine: Arc<ScriptEngine>,
     ) -> Self {
-        Self { db, registry }
+        Self { db, registry, script_engine }
     }
 
     pub async fn install(&self, package_id: &str) -> Result<(), String> {
@@ -60,6 +62,21 @@ impl PackageInstaller {
             if let Err(e) = module_model.insert(self.db.as_ref()).await {
                 tracing::error!("Failed to install module {}: {}", package_id, e);
                 return Err(e.to_string());
+            }
+
+            // Load scripts if defined
+            if let Some(entry) = manifest.entrypoints.as_ref() {
+                if let Some(hooks_path) = &entry.hooks {
+                    let module_dir = self.registry.read().await.packages_dir.join(&module_code);
+                    let full_hooks_path = module_dir.join(hooks_path);
+                    if let Err(e) = self.script_engine.load_module_scripts(&module_code, &full_hooks_path).await {
+                        tracing::error!("Failed to load hooks for module {}: {}", module_code, e);
+                    } else {
+                        tracing::info!("Hooks for module {} loaded", module_code);
+                        // Вызываем on_install
+                        let _ = self.script_engine.call_hook(&module_code, "on_install", script_rhai::Dynamic::UNIT).await;
+                    }
+                }
             }
 
             // After inserting module record, handle declarative entities if provided
@@ -165,4 +182,3 @@ impl PackageInstaller {
         Err(format!("Package {} is not installed", package_id))
     }
 }
-

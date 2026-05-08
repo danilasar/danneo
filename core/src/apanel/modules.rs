@@ -116,7 +116,7 @@ pub async fn install_module(
     Form(form): Form<ModuleActionForm>,
 ) -> impl IntoResponse {
     let installer =
-        crate::registry::PackageInstaller::new(state.db.clone(), state.packages.clone());
+        crate::registry::PackageInstaller::new(state.db.clone(), state.packages.clone(), state.script_engine.clone());
     if let Err(e) = installer.install(&form.package_id).await {
         tracing::error!("Install error: {}", e);
     }
@@ -128,7 +128,7 @@ pub async fn uninstall_module(
     Form(form): Form<ModuleActionForm>,
 ) -> impl IntoResponse {
     let installer =
-        crate::registry::PackageInstaller::new(state.db.clone(), state.packages.clone());
+        crate::registry::PackageInstaller::new(state.db.clone(), state.packages.clone(), state.script_engine.clone());
     if let Err(e) = installer.uninstall(&form.package_id).await {
         tracing::error!("Uninstall error: {}", e);
     }

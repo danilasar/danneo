@@ -1,6 +1,8 @@
 use crate::models::core_modules;
+use crate::registry::ScriptEngine;
 use sea_orm::{ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set, IntoActiveModel};
 use std::sync::Arc;
+use std::path::PathBuf;
 
 pub struct ModuleRegistry {
     pub db: Arc<DatabaseConnection>,
@@ -11,7 +13,7 @@ impl ModuleRegistry {
         Self { db }
     }
 
-    pub async fn init(&self) {
+    pub async fn init(&self, script_engine: Arc<ScriptEngine>, packages_dir: PathBuf) {
         tracing::info!("Initializing ModuleRegistry");
 
         match core_modules::Entity::find()
@@ -21,6 +23,19 @@ impl ModuleRegistry {
         {
             Ok(modules) => {
                 tracing::info!("Loaded {} active modules", modules.len());
+                for module in modules {
+                    // Пытаемся загрузить скрипты из манифеста
+                    if let Ok(manifest) = serde_json::from_value::<crate::registry::PackageManifest>(module.manifest) {
+                        if let Some(entry) = manifest.entrypoints {
+                            if let Some(hooks_path) = entry.hooks {
+                                let full_path = packages_dir.join(&module.code).join(hooks_path);
+                                if let Err(e) = script_engine.load_module_scripts(&module.code, &full_path).await {
+                                    tracing::error!("Failed to load scripts for module {}: {}", module.code, e);
+                                }
+                            }
+                        }
+                    }
+                }
             }
             Err(e) => {
                 tracing::error!("Failed to load active modules: {}", e);

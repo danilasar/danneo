@@ -1,6 +1,7 @@
 use casbin::function_map::OperatorFunction;
 use casbin::{CoreApi, DefaultModel, Enforcer, FileAdapter, MgmtApi, RbacApi};
-use rhai::Dynamic;
+// Используем Dynamic из casbin, так как он сконфигурирован с only_i32 и без функций
+use casbin::rhai::Dynamic;
 use sea_orm::DatabaseConnection;
 use sea_orm_adapter::SeaOrmAdapter;
 use std::sync::Arc;
