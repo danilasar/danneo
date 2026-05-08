@@ -1,5 +1,5 @@
 use crate::models::core_modules;
-use sea_orm::{ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set};
+use sea_orm::{ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set, IntoActiveModel};
 use std::sync::Arc;
 
 pub struct ModuleRegistry {
@@ -29,40 +29,76 @@ impl ModuleRegistry {
     }
 
     pub async fn enable(&self, module_code: &str) -> Result<(), String> {
-        let module = core_modules::Entity::find()
+        let mut model_opt = core_modules::Entity::find()
             .filter(core_modules::Column::Code.eq(module_code))
             .one(self.db.as_ref())
             .await
-            .map_err(|e| e.to_string())?
-            .ok_or_else(|| format!("Module {} not found", module_code))?;
+            .map_err(|e| format!("DB Error: {}", e))?;
 
-        let mut active_model: core_modules::ActiveModel = module.into();
-        active_model.enabled = Set(true);
-        active_model.updated_at = Set(chrono::Utc::now().into());
+        if let Some(model) = model_opt {
+            let mut active_model = model.into_active_model();
+            active_model.enabled = Set(true);
+            active_model
+                .update(self.db.as_ref())
+                .await
+                .map_err(|e| format!("DB Error: {}", e))?;
+            return Ok(());
+        }
 
-        active_model
-            .update(self.db.as_ref())
+        use crate::models::core_block_definitions;
+        let mut block_opt = core_block_definitions::Entity::find()
+            .filter(core_block_definitions::Column::BlockCode.eq(module_code))
+            .one(self.db.as_ref())
             .await
-            .map_err(|e| e.to_string())?;
-        Ok(())
+            .map_err(|e| format!("DB Error: {}", e))?;
+
+        if let Some(block) = block_opt {
+            let mut active_model = block.into_active_model();
+            active_model.enabled = Set(true);
+            active_model
+                .update(self.db.as_ref())
+                .await
+                .map_err(|e| format!("DB Error: {}", e))?;
+            return Ok(());
+        }
+
+        Err(format!("Package {} not found", module_code))
     }
 
     pub async fn disable(&self, module_code: &str) -> Result<(), String> {
-        let module = core_modules::Entity::find()
+        let mut model_opt = core_modules::Entity::find()
             .filter(core_modules::Column::Code.eq(module_code))
             .one(self.db.as_ref())
             .await
-            .map_err(|e| e.to_string())?
-            .ok_or_else(|| format!("Module {} not found", module_code))?;
+            .map_err(|e| format!("DB Error: {}", e))?;
 
-        let mut active_model: core_modules::ActiveModel = module.into();
-        active_model.enabled = Set(false);
-        active_model.updated_at = Set(chrono::Utc::now().into());
+        if let Some(model) = model_opt {
+            let mut active_model = model.into_active_model();
+            active_model.enabled = Set(false);
+            active_model
+                .update(self.db.as_ref())
+                .await
+                .map_err(|e| format!("DB Error: {}", e))?;
+            return Ok(());
+        }
 
-        active_model
-            .update(self.db.as_ref())
+        use crate::models::core_block_definitions;
+        let mut block_opt = core_block_definitions::Entity::find()
+            .filter(core_block_definitions::Column::BlockCode.eq(module_code))
+            .one(self.db.as_ref())
             .await
-            .map_err(|e| e.to_string())?;
-        Ok(())
+            .map_err(|e| format!("DB Error: {}", e))?;
+
+        if let Some(block) = block_opt {
+            let mut active_model = block.into_active_model();
+            active_model.enabled = Set(false);
+            active_model
+                .update(self.db.as_ref())
+                .await
+                .map_err(|e| format!("DB Error: {}", e))?;
+            return Ok(());
+        }
+
+        Err(format!("Package {} not found", module_code))
     }
 }

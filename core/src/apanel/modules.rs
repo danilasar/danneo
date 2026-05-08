@@ -29,9 +29,17 @@ pub async fn list_modules(State(state): State<Arc<AppState>>) -> impl IntoRespon
         Err(_) => vec![],
     };
 
+    let installed_blocks = match crate::models::core_block_definitions::Entity::find().all(state.db.as_ref()).await {
+        Ok(b) => b,
+        Err(_) => vec![],
+    };
+
     let mut installed_map = std::collections::HashMap::new();
     for m in installed_modules {
         installed_map.insert(m.code.clone(), m.enabled);
+    }
+    for b in installed_blocks {
+        installed_map.insert(b.block_code.clone(), b.enabled);
     }
 
     let mut packages_view = Vec::new();

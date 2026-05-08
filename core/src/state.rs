@@ -1,5 +1,4 @@
 use crate::acl::service::AclService;
-use crate::blocks::BlockManager;
 use crate::models::core_settings;
 use sea_orm::{DatabaseConnection, EntityTrait};
 use serde::{Deserialize, Serialize};
@@ -21,7 +20,7 @@ pub struct AppState {
     pub db: Arc<DatabaseConnection>,
     pub settings: Arc<tokio::sync::RwLock<GlobalSettings>>,
     pub tera: Arc<tera::Tera>,
-    pub block_manager: Arc<BlockManager>,
+    pub block_registry: Arc<crate::registry::BlockRegistry>,
     pub jwt_secret: String,
     pub acl: Arc<AclService>,
     pub packages: Arc<tokio::sync::RwLock<crate::registry::PackageRegistry>>,
@@ -68,8 +67,7 @@ impl AppState {
         let jwt_secret =
             std::env::var("JWT_SECRET").unwrap_or_else(|_| "super_secret_key".to_string());
 
-        let block_manager = Arc::new(BlockManager::new());
-
+        // Removed BlockManager instantiation
         // Инициализируем ACL
         let model_path = if std::path::Path::new("core/casbin_models/rbac_with_level.conf").exists()
         {
@@ -106,15 +104,15 @@ impl AppState {
         }
         tera.register_function("t", I18nFunction);
 
-        let packages_dir = if std::path::Path::new("core/modules").exists() {
-            "core/modules"
-        } else {
+        let packages_dir = if std::path::Path::new("modules").exists() {
             "modules"
-        };
-        let blocks_dir = if std::path::Path::new("core/blocks").exists() {
-            "core/blocks"
         } else {
+            "core/modules"
+        };
+        let blocks_dir = if std::path::Path::new("blocks").exists() {
             "blocks"
+        } else {
+            "core/blocks"
         };
         let mut package_registry = crate::registry::PackageRegistry::new(packages_dir, blocks_dir);
         package_registry.scan();
@@ -124,11 +122,15 @@ impl AppState {
         module_registry.init().await;
         let modules = Arc::new(tokio::sync::RwLock::new(module_registry));
 
+        let block_registry = crate::registry::BlockRegistry::new(db_arc.clone());
+        block_registry.init().await;
+        let block_registry = Arc::new(block_registry);
+
         Ok(Self {
             db: db_arc,
             settings,
             tera: Arc::new(tera),
-            block_manager,
+            block_registry,
             jwt_secret,
             acl,
             packages,

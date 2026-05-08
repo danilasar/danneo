@@ -145,7 +145,7 @@ async fn root(State(state): State<Arc<state::AppState>>) -> impl axum::response:
         settings: state.settings.clone(),
     });
 
-    let positions = state.block_manager.get_all_positions_html(ctx).await;
+    let positions = state.block_registry.get_all_positions_html(ctx).await;
     context.insert("positions", &positions);
 
     // Рендерим меню

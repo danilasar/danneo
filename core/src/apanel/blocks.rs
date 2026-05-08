@@ -8,7 +8,7 @@ use axum::{
     http::StatusCode,
     response::{Html, IntoResponse, Redirect},
 };
-use sea_orm::{ActiveModelTrait, EntityTrait, QueryOrder, Set};
+use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, QueryOrder, Set};
 use serde::Deserialize;
 use std::sync::Arc;
 use tera::Context;
@@ -143,19 +143,26 @@ pub async fn edit_block(
         None
     };
 
-    let positions = match core_block_posit::Entity::find().all(db).await {
+    let positions = match crate::models::core_block_posit::Entity::find().all(db).await {
         Ok(p) => p,
         _ => vec![],
     };
 
-    let block_files = vec!["b-News", "b-Sample", "b-Auth", "b-Menu"];
+    let block_definitions = match crate::models::core_block_definitions::Entity::find()
+        .filter(crate::models::core_block_definitions::Column::Enabled.eq(true))
+        .all(db)
+        .await
+    {
+        Ok(defs) => defs,
+        _ => vec![],
+    };
 
     let mut context = Context::new();
     let settings = state.settings.read().await;
     context.insert("site_name", &settings.site_name);
     context.insert("block", &block);
     context.insert("positions", &positions);
-    context.insert("block_files", &block_files);
+    context.insert("block_definitions", &block_definitions);
 
     match state.tera.render("apanel/block_edit.html", &context) {
         Ok(html) => Html(html).into_response(),

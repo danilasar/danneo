@@ -5,4 +5,5 @@ pub mod core_blocks;
 pub mod core_menu_groups;
 pub mod core_menu_items;
 pub mod core_modules;
+pub mod core_block_definitions;
 pub mod core_settings;

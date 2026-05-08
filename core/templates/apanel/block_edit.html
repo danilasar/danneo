@@ -18,9 +18,14 @@
             <tr>
                 <td class="ar">Файл логики:</td>
                 <td class="al">
-                    <select name="block_file">
-                        {% for file in block_files %}
-                        <option value="{{ file }}" {% if block and block.block_file == file %}selected{% endif %}>{{ file }}</option>
+                    <select name="block_file" id="block_file_select" onchange="updateSettingsSchema()">
+                        <option value="">-- Выберите логику --</option>
+                        {% for def in block_definitions %}
+                        <option value="{{ def.block_code }}" 
+                                data-schema='{{ def.settings_schema | default(value="{}") | json_encode }}'
+                                {% if block and block.block_file == def.block_code %}selected{% endif %}>
+                            {{ def.block_code }} ({{ def.version }})
+                        </option>
                         {% endfor %}
                     </select>
                 </td>
@@ -54,6 +59,10 @@
                 <td class="al">
                     <textarea name="block_setting" cols="50" rows="5">{{ block.block_setting | default(value='{}') | json_encode }}</textarea>
                     <br><small>Настройки специфичные для выбранного файла логики</small>
+                    <div style="margin-top: 10px; padding: 10px; background: #f9f9f9; border: 1px solid #ddd;">
+                        <strong>Ожидаемая схема настроек (JSON Schema):</strong>
+                        <pre id="schema_viewer" style="font-size: 11px; white-space: pre-wrap; word-wrap: break-word;">Нет доступной схемы</pre>
+                    </div>
                 </td>
             </tr>
 
@@ -67,4 +76,19 @@
         </table>
     </form>
 </div>
+
+<script>
+function updateSettingsSchema() {
+    var select = document.getElementById('block_file_select');
+    var option = select.options[select.selectedIndex];
+    if (option && option.dataset.schema) {
+        var schema = JSON.parse(option.dataset.schema);
+        var schemaViewer = document.getElementById('schema_viewer');
+        if (schemaViewer) {
+            schemaViewer.textContent = JSON.stringify(schema, null, 2);
+        }
+    }
+}
+document.addEventListener('DOMContentLoaded', updateSettingsSchema);
+</script>
 {% endblock %}
