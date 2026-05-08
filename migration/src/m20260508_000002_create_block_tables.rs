@@ -24,9 +24,23 @@ impl MigrationTrait for Migration {
                             .auto_increment()
                             .primary_key(),
                     )
-                    .col(ColumnDef::new(CoreBlockPosit::Positcode).string().not_null().unique_key())
-                    .col(ColumnDef::new(CoreBlockPosit::Positname).string().not_null())
-                    .col(ColumnDef::new(CoreBlockPosit::Pposit).integer().not_null().default(0))
+                    .col(
+                        ColumnDef::new(CoreBlockPosit::Positcode)
+                            .string()
+                            .not_null()
+                            .unique_key(),
+                    )
+                    .col(
+                        ColumnDef::new(CoreBlockPosit::Positname)
+                            .string()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(CoreBlockPosit::Pposit)
+                            .integer()
+                            .not_null()
+                            .default(0),
+                    )
                     .to_owned(),
             )
             .await?;
@@ -47,11 +61,26 @@ impl MigrationTrait for Migration {
                     .col(ColumnDef::new(CoreBlocks::Positcode).string().not_null())
                     .col(ColumnDef::new(CoreBlocks::BlockName).string().not_null())
                     .col(ColumnDef::new(CoreBlocks::BlockFile).string().not_null())
-                    .col(ColumnDef::new(CoreBlocks::BlockActive).boolean().not_null().default(true))
-                    .col(ColumnDef::new(CoreBlocks::BlockWeight).integer().not_null().default(0))
+                    .col(
+                        ColumnDef::new(CoreBlocks::BlockActive)
+                            .boolean()
+                            .not_null()
+                            .default(true),
+                    )
+                    .col(
+                        ColumnDef::new(CoreBlocks::BlockWeight)
+                            .integer()
+                            .not_null()
+                            .default(0),
+                    )
                     .col(ColumnDef::new(CoreBlocks::BlockTemp).string().null())
                     .col(ColumnDef::new(CoreBlocks::BlockMods).json().null())
-                    .col(ColumnDef::new(CoreBlocks::BlockAccess).string().not_null().default("all"))
+                    .col(
+                        ColumnDef::new(CoreBlocks::BlockAccess)
+                            .string()
+                            .not_null()
+                            .default("all"),
+                    )
                     .col(ColumnDef::new(CoreBlocks::BlockSetting).json().null())
                     .to_owned(),
             )
@@ -60,7 +89,11 @@ impl MigrationTrait for Migration {
         // Дефолтные позиции для темы Soft/Lite
         let insert_posits = Query::insert()
             .into_table(CoreBlockPosit::Table)
-            .columns([CoreBlockPosit::Positcode, CoreBlockPosit::Positname, CoreBlockPosit::Pposit])
+            .columns([
+                CoreBlockPosit::Positcode,
+                CoreBlockPosit::Positname,
+                CoreBlockPosit::Pposit,
+            ])
             .values_panic(["leftblock".into(), "Левая колонка".into(), 1.into()])
             .values_panic(["rightblock".into(), "Правая колонка".into(), 2.into()])
             .values_panic(["topblock".into(), "Верх центра".into(), 3.into()])

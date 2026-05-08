@@ -1,10 +1,10 @@
+use crate::{auth::Claims, state::AppState};
 use axum::{
     extract::State,
-    response::{Html, IntoResponse},
     http::StatusCode,
+    response::{Html, IntoResponse},
 };
 use std::sync::Arc;
-use crate::{state::AppState, auth::Claims};
 use tera::Context;
 
 pub async fn render_dashboard(

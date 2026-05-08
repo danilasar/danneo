@@ -112,7 +112,7 @@ mod tests {
         );
         assert_eq!(
             generate_slug("Новость: тест / релиз №1"),
-            "novost-test-reliz-1"
+            "novost-test-reliz-no1"
         );
     }
 

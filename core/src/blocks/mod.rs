@@ -1,10 +1,10 @@
-use std::sync::Arc;
-use std::collections::HashMap;
+use crate::models::core_blocks;
 use crate::state::GlobalSettings;
 use async_trait::async_trait;
+use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QueryOrder};
 use serde_json::Value;
-use crate::models::core_blocks;
-use sea_orm::{DatabaseConnection, EntityTrait, QueryOrder, ColumnTrait, QueryFilter};
+use std::collections::HashMap;
+use std::sync::Arc;
 
 pub mod menu;
 
@@ -48,34 +48,40 @@ impl BlockManager {
             .order_by_asc(core_blocks::Column::Positcode)
             .order_by_asc(core_blocks::Column::BlockWeight)
             .all(db.as_ref())
-            .await {
-                Ok(b) => b,
-                Err(e) => {
-                    tracing::error!("Failed to fetch all blocks: {}", e);
-                    return results;
-                }
-            };
+            .await
+        {
+            Ok(b) => b,
+            Err(e) => {
+                tracing::error!("Failed to fetch all blocks: {}", e);
+                return results;
+            }
+        };
 
         for config in blocks_configs {
             if let Some(block_logic) = self.registry.get(config.block_file.as_str()) {
                 let block_html = block_logic.render(ctx.clone(), config.block_setting).await;
-                
-                let entry = results.entry(config.positcode.clone()).or_insert_with(String::new);
-                
+
+                let entry = results
+                    .entry(config.positcode.clone())
+                    .or_insert_with(String::new);
+
                 // Оборачиваем в шаблон блока
                 entry.push_str(&format!(
                     "<div class=\"block-container\" id=\"block-{}\">\n",
                     config.id
                 ));
                 if !config.block_name.is_empty() {
-                    entry.push_str(&format!("<div class=\"block-title\">{}</div>\n", config.block_name));
+                    entry.push_str(&format!(
+                        "<div class=\"block-title\">{}</div>\n",
+                        config.block_name
+                    ));
                 }
                 entry.push_str("<div class=\"block-content\">\n");
                 entry.push_str(&block_html);
                 entry.push_str("\n</div>\n</div>\n");
             }
         }
-        
+
         results
     }
 }
@@ -92,4 +98,3 @@ impl DanneoBlock for SampleBlock {
         "Это тестовый блок Danneo".to_string()
     }
 }
-

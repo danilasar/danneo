@@ -25,7 +25,29 @@
                 <td style="padding: 8px; border: 1px solid #ddd;">{{ pkg.version }}</td>
                 <td style="padding: 8px; border: 1px solid #ddd;">{{ pkg.description | default(value="-") }}</td>
                 <td style="padding: 8px; border: 1px solid #ddd;">
-                    <a href="#" style="color: blue;">Установить</a>
+                    {% if pkg.is_installed %}
+                        <form method="POST" action="/admin/modules/uninstall" style="display:inline;">
+                            <input type="hidden" name="package_id" value="{{ pkg.id }}">
+                            <button type="submit" style="color: red; cursor: pointer; border: none; background: none; text-decoration: underline;">Удалить</button>
+                        </form>
+                        &nbsp;|&nbsp;
+                        {% if pkg.is_enabled %}
+                        <form method="POST" action="/admin/modules/disable" style="display:inline;">
+                            <input type="hidden" name="package_id" value="{{ pkg.id }}">
+                            <button type="submit" style="color: orange; cursor: pointer; border: none; background: none; text-decoration: underline;">Выключить</button>
+                        </form>
+                        {% else %}
+                        <form method="POST" action="/admin/modules/enable" style="display:inline;">
+                            <input type="hidden" name="package_id" value="{{ pkg.id }}">
+                            <button type="submit" style="color: green; cursor: pointer; border: none; background: none; text-decoration: underline;">Включить</button>
+                        </form>
+                        {% endif %}
+                    {% else %}
+                        <form method="POST" action="/admin/modules/install" style="display:inline;">
+                            <input type="hidden" name="package_id" value="{{ pkg.id }}">
+                            <button type="submit" style="color: blue; cursor: pointer; border: none; background: none; text-decoration: underline;">Установить</button>
+                        </form>
+                    {% endif %}
                 </td>
             </tr>
             {% else %}

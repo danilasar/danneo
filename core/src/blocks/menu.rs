@@ -1,9 +1,9 @@
-use std::sync::Arc;
+use crate::blocks::{BlockContext, DanneoBlock};
+use crate::models::{core_menu_groups, core_menu_items};
 use async_trait::async_trait;
+use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QueryOrder};
 use serde_json::Value;
-use crate::blocks::{DanneoBlock, BlockContext};
-use crate::models::{core_menu_items, core_menu_groups};
-use sea_orm::{EntityTrait, QueryOrder, ColumnTrait, QueryFilter, DatabaseConnection};
+use std::sync::Arc;
 
 pub struct MenuBlock;
 
@@ -14,7 +14,8 @@ impl DanneoBlock for MenuBlock {
     }
 
     async fn render(&self, ctx: Arc<BlockContext>, settings: Option<Value>) -> String {
-        let group_code = settings.as_ref()
+        let group_code = settings
+            .as_ref()
             .and_then(|s| s.get("group_code"))
             .and_then(|v| v.as_str())
             .unwrap_or("top_menu");
@@ -28,20 +29,22 @@ pub async fn render_menu(db: &DatabaseConnection, group_code: &str) -> String {
     let group = match core_menu_groups::Entity::find()
         .filter(core_menu_groups::Column::Code.eq(group_code))
         .one(db)
-        .await {
-            Ok(Some(g)) => g,
-            _ => return format!("<!-- Menu group '{}' not found -->", group_code),
-        };
+        .await
+    {
+        Ok(Some(g)) => g,
+        _ => return format!("<!-- Menu group '{}' not found -->", group_code),
+    };
 
     // Находим пункты
     let items = match core_menu_items::Entity::find()
         .filter(core_menu_items::Column::GroupId.eq(group.id))
         .order_by_asc(core_menu_items::Column::Posit)
         .all(db)
-        .await {
-            Ok(i) => i,
-            Err(_) => return "<!-- Failed to fetch menu items -->".to_string(),
-        };
+        .await
+    {
+        Ok(i) => i,
+        Err(_) => return "<!-- Failed to fetch menu items -->".to_string(),
+    };
 
     if items.is_empty() {
         return "<!-- Menu is empty -->".to_string();

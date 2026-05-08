@@ -1,14 +1,14 @@
+use crate::models::core_admin_groups;
+use crate::state::AppState;
 use axum::{
+    Form,
     extract::{Path, State},
     response::{Html, IntoResponse, Redirect},
-    Form,
 };
-use crate::state::AppState;
-use crate::models::core_admin_groups;
-use sea_orm::{EntityTrait, Set, ActiveModelTrait, QueryOrder};
+use casbin::{CoreApi, MgmtApi};
+use sea_orm::{ActiveModelTrait, EntityTrait, QueryOrder, Set};
 use serde::Deserialize;
 use std::sync::Arc;
-use casbin::{CoreApi, MgmtApi};
 
 #[derive(Deserialize)]
 pub struct GroupSaveForm {
@@ -55,9 +55,7 @@ where
 }
 
 /// Список групп
-pub async fn list_groups(
-    State(state): State<Arc<AppState>>,
-) -> impl IntoResponse {
+pub async fn list_groups(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let groups = core_admin_groups::Entity::find()
         .order_by_asc(core_admin_groups::Column::Id)
         .all(state.db.as_ref())
@@ -68,8 +66,11 @@ pub async fn list_groups(
     let settings = state.settings.read().await;
     context.insert("site_name", &settings.site_name);
     context.insert("groups", &groups);
-    
-    let html = state.tera.render("apanel/agroups_list.html", &context).unwrap();
+
+    let html = state
+        .tera
+        .render("apanel/agroups_list.html", &context)
+        .unwrap();
     Html(html)
 }
 
@@ -89,7 +90,13 @@ pub async fn edit_group(
 
     // Список доступных системных модулей
     let available_modules = vec![
-        "dashboard", "settings", "design", "blocks", "menu", "amanage", "agroups"
+        "dashboard",
+        "settings",
+        "design",
+        "blocks",
+        "menu",
+        "amanage",
+        "agroups",
     ];
 
     // Получаем текущие политики группы из Casbin
@@ -111,8 +118,11 @@ pub async fn edit_group(
     context.insert("group", &group);
     context.insert("available_modules", &available_modules);
     context.insert("current_permissions", &current_permissions);
-    
-    let html = state.tera.render("apanel/agroups_edit.html", &context).unwrap();
+
+    let html = state
+        .tera
+        .render("apanel/agroups_edit.html", &context)
+        .unwrap();
     Html(html)
 }
 
@@ -129,16 +139,19 @@ pub async fn save_group(
             .unwrap()
             .unwrap()
             .into();
-        
+
         let old_name = group.name.clone().unwrap();
         group.name = Set(form.name.clone());
         group.level = Set(form.level);
         let updated = group.update(state.db.as_ref()).await.unwrap();
-        
+
         // Обновляем политики в Casbin
         // 1. Удаляем старые
-        state.acl.remove_filtered_policy(0, &format!("role:{}", old_name)).await;
-        
+        state
+            .acl
+            .remove_filtered_policy(0, &format!("role:{}", old_name))
+            .await;
+
         updated.id
     } else {
         // Создание
@@ -154,7 +167,10 @@ pub async fn save_group(
     // 2. Добавляем новые политики
     for module in form.permissions {
         // p, role:name, module, *, level
-        state.acl.add_policy(&format!("role:{}", form.name), &module, "*", form.level).await;
+        state
+            .acl
+            .add_policy(&format!("role:{}", form.name), &module, "*", form.level)
+            .await;
     }
 
     Redirect::to("/admin/agroups")
@@ -170,12 +186,21 @@ pub async fn delete_group(
         return Redirect::to("/admin/agroups");
     }
 
-    if let Some(group) = core_admin_groups::Entity::find_by_id(id).one(state.db.as_ref()).await.unwrap() {
+    if let Some(group) = core_admin_groups::Entity::find_by_id(id)
+        .one(state.db.as_ref())
+        .await
+        .unwrap()
+    {
         // Удаляем политики из Casbin
-        state.acl.remove_filtered_policy(0, &format!("role:{}", group.name)).await;
-        
+        state
+            .acl
+            .remove_filtered_policy(0, &format!("role:{}", group.name))
+            .await;
+
         // Удаляем из БД
-        let _ = core_admin_groups::Entity::delete_by_id(id).exec(state.db.as_ref()).await;
+        let _ = core_admin_groups::Entity::delete_by_id(id)
+            .exec(state.db.as_ref())
+            .await;
     }
 
     Redirect::to("/admin/agroups")

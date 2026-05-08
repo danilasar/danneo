@@ -1,10 +1,10 @@
-use casbin::{Enforcer, DefaultModel, FileAdapter, CoreApi, RbacApi, MgmtApi};
 use casbin::function_map::OperatorFunction;
+use casbin::{CoreApi, DefaultModel, Enforcer, FileAdapter, MgmtApi, RbacApi};
 use rhai::Dynamic;
-use std::sync::Arc;
-use tokio::sync::RwLock;
 use sea_orm::DatabaseConnection;
 use sea_orm_adapter::SeaOrmAdapter;
+use std::sync::Arc;
+use tokio::sync::RwLock;
 
 pub struct AclService {
     enforcer: Arc<RwLock<Enforcer>>,
@@ -16,7 +16,8 @@ fn match_level(a: Dynamic, b: Dynamic) -> Dynamic {
     let p_level = if b.is_int() {
         b.as_int().unwrap()
     } else {
-        b.clone().into_string()
+        b.clone()
+            .into_string()
             .unwrap_or_default()
             .parse::<i32>()
             .unwrap_or(0)
@@ -31,12 +32,18 @@ impl AclService {
 
     /// Создает новый сервис на основе базы данных
     pub async fn new_db(db: Arc<DatabaseConnection>, model_path: &str) -> Self {
-        let m = DefaultModel::from_file(model_path).await.expect("Failed to load Casbin model");
-        let a = SeaOrmAdapter::new((*db).clone()).await.expect("Failed to initialize SeaORM adapter");
-        let mut e = Enforcer::new(m, a).await.expect("Failed to create Enforcer");
-        
+        let m = DefaultModel::from_file(model_path)
+            .await
+            .expect("Failed to load Casbin model");
+        let a = SeaOrmAdapter::new((*db).clone())
+            .await
+            .expect("Failed to initialize SeaORM adapter");
+        let mut e = Enforcer::new(m, a)
+            .await
+            .expect("Failed to create Enforcer");
+
         e.add_function("matchLevel", OperatorFunction::Arg2(match_level));
-        
+
         Self {
             enforcer: Arc::new(RwLock::new(e)),
         }
@@ -47,9 +54,9 @@ impl AclService {
         let m = DefaultModel::from_file(&model_path).await.unwrap();
         let a = FileAdapter::new(policy_path);
         let mut e = Enforcer::new(m, a).await.unwrap();
-        
+
         e.add_function("matchLevel", OperatorFunction::Arg2(match_level));
-        
+
         Self {
             enforcer: Arc::new(RwLock::new(e)),
         }
@@ -69,20 +76,30 @@ impl AclService {
     /// Удаление роли у пользователя
     pub async fn delete_role_for_user(&self, user: &str, role: &str) -> bool {
         let mut e = self.enforcer.write().await;
-        e.delete_role_for_user(user, role, None).await.unwrap_or(false)
+        e.delete_role_for_user(user, role, None)
+            .await
+            .unwrap_or(false)
     }
 
     /// Добавление политики (права доступа)
     pub async fn add_policy(&self, sub: &str, obj: &str, act: &str, level: i32) -> bool {
         let mut e = self.enforcer.write().await;
-        e.add_policy(vec![sub.to_string(), obj.to_string(), act.to_string(), level.to_string()])
-            .await.unwrap_or(false)
+        e.add_policy(vec![
+            sub.to_string(),
+            obj.to_string(),
+            act.to_string(),
+            level.to_string(),
+        ])
+        .await
+        .unwrap_or(false)
     }
 
     /// Удаление всех политик для субъекта (роли)
     pub async fn remove_filtered_policy(&self, field_index: usize, field_value: &str) -> bool {
         let mut e = self.enforcer.write().await;
-        e.remove_filtered_policy(field_index, vec![field_value.to_string()]).await.unwrap_or(false)
+        e.remove_filtered_policy(field_index, vec![field_value.to_string()])
+            .await
+            .unwrap_or(false)
     }
 }
 
@@ -109,7 +126,9 @@ m = g(r.sub, p.sub) && (r.obj == p.obj || p.obj == "*") && (r.act == p.act || p.
         "#).unwrap();
 
         let mut policy_file = NamedTempFile::new().unwrap();
-        writeln!(policy_file, r#"
+        writeln!(
+            policy_file,
+            r#"
 p, role:admin, settings, edit, 80
 p, role:admin, news, edit, 10
 p, role:manager, news, edit, 10
@@ -117,12 +136,15 @@ p, role:super, *, *, 100
 g, alice, role:admin
 g, bob, role:manager
 g, root, role:super
-        "#).unwrap();
+        "#
+        )
+        .unwrap();
 
         let acl = AclService::new_file(
-            model_file.path().to_str().unwrap().to_string(), 
-            policy_file.path().to_str().unwrap().to_string()
-        ).await;
+            model_file.path().to_str().unwrap().to_string(),
+            policy_file.path().to_str().unwrap().to_string(),
+        )
+        .await;
 
         assert!(acl.enforce("alice", "settings", "edit", 90).await);
         assert!(!acl.enforce("alice", "settings", "edit", 50).await);

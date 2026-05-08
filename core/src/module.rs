@@ -1,7 +1,7 @@
-use axum::Router;
-use async_trait::async_trait;
-use std::sync::Arc;
 use crate::state::AppState;
+use async_trait::async_trait;
+use axum::Router;
+use std::sync::Arc;
 
 /// Базовый трейт, который должен реализовать каждый модуль Danneo.
 /// Он определяет жизненный цикл и интеграцию модуля в систему.
@@ -33,11 +33,11 @@ pub trait DanneoModule: Send + Sync {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sea_orm::{DatabaseBackend, MockDatabase};
+    use sea_orm::Database;
 
     // Создаем тестовую реализацию модуля
     struct TestModule;
-    
+
     #[async_trait]
     impl DanneoModule for TestModule {
         fn name(&self) -> &'static str {
@@ -48,23 +48,13 @@ mod tests {
     #[tokio::test]
     async fn test_module_defaults() {
         let module = TestModule;
-        
-        // Проверяем имя
         assert_eq!(module.name(), "test_module");
-        
-        // Проверяем, что дефолтный init не возвращает ошибку
-        // Нужно подсунуть MockDatabase результаты для загрузки настроек
-        use crate::models::core_settings;
-        let db = MockDatabase::new(DatabaseBackend::Postgres)
-            .append_query_results([vec![
-                core_settings::Model {
-                    key: "site_name".to_string(),
-                    value: serde_json::json!("Test"),
-                }
-            ]])
-            .into_connection();
+
+        let db = Database::connect("sqlite::memory:").await.unwrap();
+        use sea_orm_migration::MigratorTrait;
+        migration::Migrator::up(&db, None).await.unwrap();
+
         let state = Arc::new(AppState::new(db).await.unwrap());
-        
         let init_result = module.init(state).await;
         assert!(init_result.is_ok());
     }

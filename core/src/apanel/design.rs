@@ -1,12 +1,12 @@
+use crate::{auth::Claims, state::AppState};
 use axum::{
-    extract::{State, Form},
-    response::{Html, IntoResponse, Redirect},
+    extract::{Form, State},
     http::StatusCode,
+    response::{Html, IntoResponse, Redirect},
 };
-use std::sync::Arc;
-use crate::{state::AppState, auth::Claims};
-use tera::Context;
 use serde::Deserialize;
+use std::sync::Arc;
+use tera::Context;
 
 #[derive(Deserialize)]
 pub struct SaveFileForm {
@@ -14,28 +14,32 @@ pub struct SaveFileForm {
     pub content: String,
 }
 
-pub async fn show_design(
-    _claims: Claims,
-    State(state): State<Arc<AppState>>,
-) -> impl IntoResponse {
+pub async fn show_design(_claims: Claims, State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let settings = state.settings.read().await;
     let theme = &settings.site_temp;
-    
+
     let mut context = Context::new();
     context.insert("site_temp", theme);
     context.insert("site_name", &settings.site_name);
 
     // Читаем index.html
     let index_path = format!("core/templates/frontend/{}/index.html", theme);
-    let index_content = std::fs::read_to_string(&index_path).unwrap_or_else(|_| "<!-- Шаблон не найден -->".to_string());
-    let index_json = serde_json::to_string(&index_content).unwrap().replace("</script>", "<\\/script>");
+    let index_content = std::fs::read_to_string(&index_path)
+        .unwrap_or_else(|_| "<!-- Шаблон не найден -->".to_string());
+    let index_json = serde_json::to_string(&index_content)
+        .unwrap()
+        .replace("</script>", "<\\/script>");
     context.insert("index_html_content_json", &index_json);
     context.insert("initial_content", &index_content);
 
     // Читаем screen.css
     let css_path = format!("core/static/frontend/{}/css/screen.css", theme);
-    let css_content = std::fs::read_to_string(&css_path).unwrap_or_else(|_| "/* CSS не найден */".to_string());
-    context.insert("screen_css_content_json", &serde_json::to_string(&css_content).unwrap());
+    let css_content =
+        std::fs::read_to_string(&css_path).unwrap_or_else(|_| "/* CSS не найден */".to_string());
+    context.insert(
+        "screen_css_content_json",
+        &serde_json::to_string(&css_content).unwrap(),
+    );
 
     match state.tera.render("apanel/design.html", &context) {
         Ok(html) => Html(html).into_response(),
@@ -85,31 +89,27 @@ pub async fn save_file(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::auth::AuthService;
     use axum::{
         body::Body,
         http::{Request, StatusCode},
     };
+    use sea_orm::Database;
     use tower::ServiceExt;
-    use sea_orm::{DatabaseBackend, MockDatabase};
-    use crate::auth::AuthService;
-    use crate::models::core_settings;
-    use serde_json::json;
+
+    async fn setup_test_db() -> sea_orm::DatabaseConnection {
+        let db = Database::connect("sqlite::memory:").await.unwrap();
+        use sea_orm_migration::MigratorTrait;
+        migration::Migrator::up(&db, None).await.unwrap();
+        db
+    }
 
     #[tokio::test]
     async fn test_show_design_page() {
-        let db = MockDatabase::new(DatabaseBackend::Postgres)
-            .append_query_results([
-                vec![
-                    core_settings::Model { key: "site_name".to_string(), value: json!("Test Site") },
-                    core_settings::Model { key: "admin_email".to_string(), value: json!("admin@test.com") },
-                    core_settings::Model { key: "site_url".to_string(), value: json!("http://localhost") },
-                    core_settings::Model { key: "site_temp".to_string(), value: json!("Soft") },
-                ]
-            ])
-            .into_connection();
+        let db = setup_test_db().await;
         let state = Arc::new(AppState::new(db).await.unwrap());
         let jwt_secret = state.jwt_secret.clone();
-        
+
         let app = axum::Router::new()
             .route("/admin/design", axum::routing::get(show_design))
             .with_state(state);
@@ -123,7 +123,7 @@ mod tests {
                     .uri("/admin/design")
                     .header("Cookie", format!("danneo_token={}", token))
                     .body(Body::empty())
-                    .unwrap()
+                    .unwrap(),
             )
             .await
             .unwrap();
@@ -133,19 +133,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_save_file_path_traversal_protection() {
-        let db = MockDatabase::new(DatabaseBackend::Postgres)
-            .append_query_results([
-                vec![
-                    core_settings::Model { key: "site_name".to_string(), value: json!("Test Site") },
-                    core_settings::Model { key: "admin_email".to_string(), value: json!("admin@test.com") },
-                    core_settings::Model { key: "site_url".to_string(), value: json!("http://localhost") },
-                    core_settings::Model { key: "site_temp".to_string(), value: json!("Soft") },
-                ]
-            ])
-            .into_connection();
+        let db = setup_test_db().await;
         let state = Arc::new(AppState::new(db).await.unwrap());
         let jwt_secret = state.jwt_secret.clone();
-        
+
         let app = axum::Router::new()
             .route("/admin/design/save", axum::routing::post(save_file))
             .with_state(state);
@@ -154,7 +145,7 @@ mod tests {
         let token = auth_service.create_token(1, 9999999999).unwrap();
 
         let form_data = "file_name=../../etc/passwd&content=hacking";
-        
+
         let response = app
             .oneshot(
                 Request::builder()
@@ -163,7 +154,7 @@ mod tests {
                     .header("Cookie", format!("danneo_token={}", token))
                     .header("Content-Type", "application/x-www-form-urlencoded")
                     .body(Body::from(form_data))
-                    .unwrap()
+                    .unwrap(),
             )
             .await
             .unwrap();

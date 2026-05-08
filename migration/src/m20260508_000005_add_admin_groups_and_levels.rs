@@ -24,8 +24,18 @@ impl MigrationTrait for Migration {
                             .auto_increment()
                             .primary_key(),
                     )
-                    .col(ColumnDef::new(CoreAdminGroups::Name).string().not_null().unique_key())
-                    .col(ColumnDef::new(CoreAdminGroups::Level).integer().not_null().default(1))
+                    .col(
+                        ColumnDef::new(CoreAdminGroups::Name)
+                            .string()
+                            .not_null()
+                            .unique_key(),
+                    )
+                    .col(
+                        ColumnDef::new(CoreAdminGroups::Level)
+                            .integer()
+                            .not_null()
+                            .default(1),
+                    )
                     .to_owned(),
             )
             .await?;
@@ -36,7 +46,20 @@ impl MigrationTrait for Migration {
                 Table::alter()
                     .table(CoreAdmins::Table)
                     .add_column(ColumnDef::new(CoreAdmins::GroupId).integer().null())
-                    .add_column(ColumnDef::new(CoreAdmins::Level).integer().not_null().default(1))
+                    .to_owned(),
+            )
+            .await?;
+
+        manager
+            .alter_table(
+                Table::alter()
+                    .table(CoreAdmins::Table)
+                    .add_column(
+                        ColumnDef::new(CoreAdmins::Level)
+                            .integer()
+                            .not_null()
+                            .default(1),
+                    )
                     .to_owned(),
             )
             .await?;
@@ -69,6 +92,14 @@ impl MigrationTrait for Migration {
                 Table::alter()
                     .table(CoreAdmins::Table)
                     .drop_column(CoreAdmins::GroupId)
+                    .to_owned(),
+            )
+            .await?;
+
+        manager
+            .alter_table(
+                Table::alter()
+                    .table(CoreAdmins::Table)
                     .drop_column(CoreAdmins::Level)
                     .to_owned(),
             )

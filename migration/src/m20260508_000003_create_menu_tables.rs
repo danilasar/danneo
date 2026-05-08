@@ -24,7 +24,12 @@ impl MigrationTrait for Migration {
                             .auto_increment()
                             .primary_key(),
                     )
-                    .col(ColumnDef::new(CoreMenuGroups::Code).string().not_null().unique_key())
+                    .col(
+                        ColumnDef::new(CoreMenuGroups::Code)
+                            .string()
+                            .not_null()
+                            .unique_key(),
+                    )
                     .col(ColumnDef::new(CoreMenuGroups::Title).string().not_null())
                     .to_owned(),
             )
@@ -44,15 +49,35 @@ impl MigrationTrait for Migration {
                             .primary_key(),
                     )
                     .col(ColumnDef::new(CoreMenuItems::GroupId).integer().not_null())
-                    .col(ColumnDef::new(CoreMenuItems::ParentId).integer().not_null().default(0))
+                    .col(
+                        ColumnDef::new(CoreMenuItems::ParentId)
+                            .integer()
+                            .not_null()
+                            .default(0),
+                    )
                     .col(ColumnDef::new(CoreMenuItems::Title).string().not_null())
                     .col(ColumnDef::new(CoreMenuItems::Link).string().not_null())
-                    .col(ColumnDef::new(CoreMenuItems::Target).string().not_null().default("_self"))
+                    .col(
+                        ColumnDef::new(CoreMenuItems::Target)
+                            .string()
+                            .not_null()
+                            .default("_self"),
+                    )
                     .col(ColumnDef::new(CoreMenuItems::Css).string().null())
                     .col(ColumnDef::new(CoreMenuItems::Before).string().null())
                     .col(ColumnDef::new(CoreMenuItems::After).string().null())
-                    .col(ColumnDef::new(CoreMenuItems::Posit).integer().not_null().default(0))
-                    .col(ColumnDef::new(CoreMenuItems::Acc).string().not_null().default("all"))
+                    .col(
+                        ColumnDef::new(CoreMenuItems::Posit)
+                            .integer()
+                            .not_null()
+                            .default(0),
+                    )
+                    .col(
+                        ColumnDef::new(CoreMenuItems::Acc)
+                            .string()
+                            .not_null()
+                            .default("all"),
+                    )
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk-menu-items-group")

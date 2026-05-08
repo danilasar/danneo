@@ -1,13 +1,13 @@
+use crate::{auth::Claims, models::core_settings, state::AppState};
 use axum::{
-    extract::{State, Form},
-    response::{Html, IntoResponse, Redirect},
+    extract::{Form, State},
     http::StatusCode,
+    response::{Html, IntoResponse, Redirect},
 };
-use std::sync::Arc;
-use crate::{state::AppState, auth::Claims, models::core_settings};
-use tera::Context;
+use sea_orm::{ActiveModelTrait, EntityTrait, Set};
 use serde::Deserialize;
-use sea_orm::{EntityTrait, Set, ActiveModelTrait};
+use std::sync::Arc;
+use tera::Context;
 
 #[derive(Deserialize)]
 pub struct SettingsForm {
@@ -27,9 +27,9 @@ pub async fn show_settings(
     context.insert("admin_email", &settings.admin_email);
     context.insert("site_url", &settings.site_url);
     context.insert("site_temp", &settings.site_temp);
-    
+
     // Список доступных тем (в будущем сканировать папку)
-    let themes = vec!["Soft", "Old", "Clear"]; 
+    let themes = vec!["Soft", "Old", "Clear"];
     context.insert("themes", &themes);
 
     match state.tera.render("apanel/settings.html", &context) {
@@ -62,15 +62,16 @@ pub async fn save_settings(
             key: Set(key.to_string()),
             value: Set(serde_json::json!(value)),
         };
-        
+
         if let Err(e) = core_settings::Entity::insert(active_model)
             .on_conflict(
                 sea_orm::sea_query::OnConflict::column(core_settings::Column::Key)
                     .update_column(core_settings::Column::Value)
-                    .to_owned()
+                    .to_owned(),
             )
             .exec(db)
-            .await {
+            .await
+        {
             tracing::error!("Failed to save setting {}: {}", key, e);
             return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
@@ -95,27 +96,25 @@ mod tests {
         body::Body,
         http::{Request, StatusCode},
     };
+    use sea_orm::Database;
     use tower::ServiceExt;
-    use sea_orm::{DatabaseBackend, MockDatabase};
-    use crate::models::core_settings;
-    use serde_json::json;
 
     use crate::auth::AuthService;
 
+    async fn setup_test_db() -> sea_orm::DatabaseConnection {
+        let db = Database::connect("sqlite::memory:").await.unwrap();
+        use sea_orm_migration::MigratorTrait;
+        migration::Migrator::up(&db, None).await.unwrap();
+        db
+    }
+
     #[tokio::test]
     async fn test_show_settings_page() {
-        let db = MockDatabase::new(DatabaseBackend::Postgres)
-            .append_query_results([
-                vec![
-                    core_settings::Model { key: "site_name".to_string(), value: json!("Test Site") },
-                    core_settings::Model { key: "admin_email".to_string(), value: json!("admin@test.com") },
-                ]
-            ])
-            .into_connection();
+        let db = setup_test_db().await;
 
         let state = Arc::new(AppState::new(db).await.unwrap());
         let jwt_secret = state.jwt_secret.clone();
-        
+
         let app = axum::Router::new()
             .route("/admin/settings", axum::routing::get(show_settings))
             .with_state(state);
@@ -130,7 +129,7 @@ mod tests {
                     .uri("/admin/settings")
                     .header("Cookie", format!("danneo_token={}", token))
                     .body(Body::empty())
-                    .unwrap()
+                    .unwrap(),
             )
             .await
             .unwrap();
@@ -140,26 +139,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_save_settings_redirect() {
-        let db = MockDatabase::new(DatabaseBackend::Postgres)
-            .append_query_results([
-                vec![
-                    core_settings::Model { key: "site_name".to_string(), value: json!("Test Site") },
-                    core_settings::Model { key: "admin_email".to_string(), value: json!("admin@test.com") },
-                    core_settings::Model { key: "site_url".to_string(), value: json!("http://localhost") },
-                    core_settings::Model { key: "site_temp".to_string(), value: json!("Soft") },
-                ]
-            ])
-            .append_exec_results([
-                sea_orm::MockExecResult { last_insert_id: 0, rows_affected: 1 },
-                sea_orm::MockExecResult { last_insert_id: 0, rows_affected: 1 },
-                sea_orm::MockExecResult { last_insert_id: 0, rows_affected: 1 },
-                sea_orm::MockExecResult { last_insert_id: 0, rows_affected: 1 },
-            ])
-            .into_connection();
+        let db = setup_test_db().await;
 
         let state = Arc::new(AppState::new(db).await.unwrap());
         let jwt_secret = state.jwt_secret.clone();
-        
+
         let app = axum::Router::new()
             .route("/admin/settings/save", axum::routing::post(save_settings))
             .with_state(state);
@@ -167,8 +151,9 @@ mod tests {
         let auth_service = AuthService::new(jwt_secret);
         let token = auth_service.create_token(1, 9999999999).unwrap();
 
-        let form_data = "site_name=New+Name&admin_email=new@test.com&site_url=http://new.com&site_temp=Old";
-        
+        let form_data =
+            "site_name=New+Name&admin_email=new@test.com&site_url=http://new.com&site_temp=Old";
+
         let response = app
             .oneshot(
                 Request::builder()
@@ -177,12 +162,15 @@ mod tests {
                     .header("Cookie", format!("danneo_token={}", token))
                     .header("Content-Type", "application/x-www-form-urlencoded")
                     .body(Body::from(form_data))
-                    .unwrap()
+                    .unwrap(),
             )
             .await
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::SEE_OTHER);
-        assert_eq!(response.headers().get("location").unwrap(), "/admin/settings");
+        assert_eq!(
+            response.headers().get("location").unwrap(),
+            "/admin/settings"
+        );
     }
 }

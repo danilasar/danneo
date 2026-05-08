@@ -24,7 +24,12 @@ impl MigrationTrait for Migration {
                             .auto_increment()
                             .primary_key(),
                     )
-                    .col(ColumnDef::new(CoreAdmins::Login).string().not_null().unique_key())
+                    .col(
+                        ColumnDef::new(CoreAdmins::Login)
+                            .string()
+                            .not_null()
+                            .unique_key(),
+                    )
                     .col(ColumnDef::new(CoreAdmins::PasswordHash).string().not_null())
                     .to_owned(),
             )
@@ -64,7 +69,7 @@ impl MigrationTrait for Migration {
         manager
             .drop_table(Table::drop().table(CoreSettings::Table).to_owned())
             .await?;
-        
+
         manager
             .drop_table(Table::drop().table(CoreAdmins::Table).to_owned())
             .await?;

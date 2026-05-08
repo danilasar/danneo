@@ -1,7 +1,7 @@
-use std::path::{Path, PathBuf};
+use crate::registry::manifest::{BlockManifest, PackageManifest};
 use std::collections::HashMap;
-use crate::registry::manifest::{PackageManifest, BlockManifest};
-use tracing::{info, warn, error};
+use std::path::{Path, PathBuf};
+use tracing::{error, info, warn};
 
 pub struct PackageRegistry {
     pub packages_dir: PathBuf,
@@ -23,7 +23,7 @@ impl PackageRegistry {
     pub fn scan(&mut self) {
         self.packages.clear();
         self.blocks.clear();
-        
+
         // Scan modules
         if self.packages_dir.exists() {
             if let Ok(entries) = std::fs::read_dir(&self.packages_dir) {
@@ -38,7 +38,11 @@ impl PackageRegistry {
                                     self.packages.insert(manifest.package.id.clone(), manifest);
                                 }
                                 Err(e) => {
-                                    error!("Failed to load package manifest from {}: {}", manifest_path.display(), e);
+                                    error!(
+                                        "Failed to load package manifest from {}: {}",
+                                        manifest_path.display(),
+                                        e
+                                    );
                                 }
                             }
                         }
@@ -46,7 +50,10 @@ impl PackageRegistry {
                 }
             }
         } else {
-            warn!("Packages directory not found: {}", self.packages_dir.display());
+            warn!(
+                "Packages directory not found: {}",
+                self.packages_dir.display()
+            );
             if let Err(e) = std::fs::create_dir_all(&self.packages_dir) {
                 error!("Failed to create packages directory: {}", e);
             }
@@ -66,7 +73,11 @@ impl PackageRegistry {
                                     self.blocks.insert(manifest.block.id.clone(), manifest);
                                 }
                                 Err(e) => {
-                                    error!("Failed to load block manifest from {}: {}", manifest_path.display(), e);
+                                    error!(
+                                        "Failed to load block manifest from {}: {}",
+                                        manifest_path.display(),
+                                        e
+                                    );
                                 }
                             }
                         }
@@ -81,13 +92,19 @@ impl PackageRegistry {
         }
     }
 
-    fn load_package_manifest(&self, path: &Path) -> Result<PackageManifest, Box<dyn std::error::Error>> {
+    fn load_package_manifest(
+        &self,
+        path: &Path,
+    ) -> Result<PackageManifest, Box<dyn std::error::Error>> {
         let content = std::fs::read_to_string(path)?;
         let manifest: PackageManifest = toml::from_str(&content)?;
         Ok(manifest)
     }
 
-    fn load_block_manifest(&self, path: &Path) -> Result<BlockManifest, Box<dyn std::error::Error>> {
+    fn load_block_manifest(
+        &self,
+        path: &Path,
+    ) -> Result<BlockManifest, Box<dyn std::error::Error>> {
         let content = std::fs::read_to_string(path)?;
         let manifest: BlockManifest = toml::from_str(&content)?;
         Ok(manifest)

@@ -1,4 +1,4 @@
-use jsonwebtoken::{encode, decode, Header, Validation, EncodingKey, DecodingKey};
+use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation, decode, encode};
 use serde::{Deserialize, Serialize};
 
 /// Полезная нагрузка токена (то, что будет храниться внутри JWT)
@@ -25,14 +25,14 @@ pub struct LoginResponse {
     pub token: String,
 }
 
+use crate::models::core_admins;
+use crate::state::AppState;
 use axum::{
-    extract::{State, Json},
+    extract::{Json, State},
     response::IntoResponse,
 };
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use std::sync::Arc;
-use crate::state::AppState;
-use crate::models::core_admins;
-use sea_orm::{EntityTrait, QueryFilter, ColumnTrait};
 
 pub async fn admin_login(
     State(state): State<Arc<AppState>>,
@@ -48,8 +48,7 @@ pub async fn admin_login(
     let admin = admin.ok_or(StatusCode::UNAUTHORIZED)?;
 
     // 2. Проверяем хеш пароля
-    let is_valid = bcrypt::verify(&payload.password, &admin.password_hash)
-        .unwrap_or(false);
+    let is_valid = bcrypt::verify(&payload.password, &admin.password_hash).unwrap_or(false);
 
     if !is_valid {
         return Err(StatusCode::UNAUTHORIZED);
@@ -59,8 +58,9 @@ pub async fn admin_login(
     let auth_service = AuthService::new(state.jwt_secret.clone());
     // Даем токен на 24 часа
     let exp = (chrono::Utc::now() + chrono::Duration::hours(24)).timestamp() as usize;
-    
-    let token = auth_service.create_token(admin.id, exp)
+
+    let token = auth_service
+        .create_token(admin.id, exp)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     Ok(Json(LoginResponse { token }))
@@ -74,7 +74,11 @@ impl AuthService {
     /// Генерация токена для администратора
     pub fn create_token(&self, admin_id: i32, exp: usize) -> jsonwebtoken::errors::Result<String> {
         let claims = Claims { admin_id, exp };
-        encode(&Header::default(), &claims, &EncodingKey::from_secret(self.secret.as_ref()))
+        encode(
+            &Header::default(),
+            &claims,
+            &EncodingKey::from_secret(self.secret.as_ref()),
+        )
     }
 
     /// Проверка валидности токена и извлечение данных
@@ -90,18 +94,16 @@ impl AuthService {
 
 use axum::{
     async_trait,
-    extract::{FromRequestParts, FromRef},
-    http::{request::Parts, StatusCode},
+    extract::{FromRef, FromRequestParts},
+    http::{StatusCode, request::Parts},
 };
 
 // Обработчик для страницы входа
-pub async fn show_login_page(
-    State(state): State<Arc<AppState>>,
-) -> impl IntoResponse {
+pub async fn show_login_page(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let settings = state.settings.read().await;
     let mut context = tera::Context::new();
     context.insert("site_name", &settings.site_name);
-    
+
     match state.tera.render("apanel/login.html", &context) {
         Ok(html) => axum::response::Html(html),
         Err(e) => {
@@ -120,9 +122,12 @@ where
 {
     type Rejection = (StatusCode, &'static str);
 
-    async fn from_request_parts(parts: &mut Parts, state: &S) -> std::result::Result<Self, Self::Rejection> {
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &S,
+    ) -> std::result::Result<Self, Self::Rejection> {
         let state = Arc::<AppState>::from_ref(state);
-        
+
         // 1. Пытаемся взять из заголовка Authorization
         let auth_header = parts
             .headers
@@ -152,12 +157,15 @@ where
 
         if let Some(token) = token {
             let auth_service = AuthService::new(state.jwt_secret.clone());
-            return auth_service.verify_token(&token).map_err(|_| {
-                (StatusCode::UNAUTHORIZED, "Invalid or expired token")
-            });
+            return auth_service
+                .verify_token(&token)
+                .map_err(|_| (StatusCode::UNAUTHORIZED, "Invalid or expired token"));
         }
 
-        Err((StatusCode::UNAUTHORIZED, "Missing Authorization header or cookie"))
+        Err((
+            StatusCode::UNAUTHORIZED,
+            "Missing Authorization header or cookie",
+        ))
     }
 }
 
@@ -168,17 +176,17 @@ mod tests {
     #[test]
     fn test_jwt_creation_and_verification() {
         let auth_service = AuthService::new("super_secret_key".to_string());
-        
+
         let admin_id = 42;
         // Токен живет до timestamp 10000000000 (далекое будущее)
         let token_res = auth_service.create_token(admin_id, 10000000000);
         assert!(token_res.is_ok(), "Token should be created successfully");
-        
+
         let token = token_res.unwrap();
-        
+
         let claims_res = auth_service.verify_token(&token);
         assert!(claims_res.is_ok(), "Token should be verified successfully");
-        
+
         let claims = claims_res.unwrap();
         assert_eq!(claims.admin_id, admin_id);
     }
@@ -192,36 +200,38 @@ mod tests {
 
     #[tokio::test]
     async fn test_admin_login_success() {
-        use sea_orm::{DatabaseBackend, MockDatabase, Value};
         use crate::models::core_admins;
-        use std::collections::BTreeMap;
-        
+        use sea_orm::{ActiveModelTrait, Database, Set};
+
+        let db = Database::connect("sqlite::memory:").await.unwrap();
+        use sea_orm_migration::MigratorTrait;
+        migration::Migrator::up(&db, None).await.unwrap();
+
         let password = "my_secure_password";
         let password_hash = bcrypt::hash(password, 4).unwrap();
 
-        let mut row = BTreeMap::new();
-        row.insert("id".to_string(), Value::Int(Some(1)));
-        row.insert("login".to_string(), Value::String(Some(Box::new("admin".to_string()))));
-        row.insert("password_hash".to_string(), Value::String(Some(Box::new(password_hash.clone()))));
-        row.insert("email".to_string(), Value::String(Some(Box::new("admin@test.com".to_string()))));
-        row.insert("permissions".to_string(), Value::Json(Some(Box::new(serde_json::json!(["all"])))));
-
-        // Мокаем базу данных для возврата админа
-        let db = MockDatabase::new(DatabaseBackend::Postgres)
-            // Возвращаем пустые настройки для AppState::new
-            .append_query_results([Vec::<BTreeMap<String, Value>>::new()])
-            // Возвращаем админа при запросе admin_login
-            .append_query_results([vec![row]])
-            .into_connection();
+        core_admins::ActiveModel {
+            login: Set("test_admin".to_string()),
+            password_hash: Set(password_hash),
+            email: Set(Some("admin@test.com".to_string())),
+            permissions: Set(serde_json::json!(["all"])),
+            ..Default::default()
+        }
+        .insert(&db)
+        .await
+        .unwrap();
 
         let state = Arc::new(AppState::new(db).await.unwrap());
-        
+
         let payload = Json(LoginRequest {
-            login: "admin".to_string(),
+            login: "test_admin".to_string(),
             password: password.to_string(),
         });
 
         let response = admin_login(State(state), payload).await;
-        assert!(response.is_ok(), "Admin login should succeed with correct credentials");
+        assert!(
+            response.is_ok(),
+            "Admin login should succeed with correct credentials"
+        );
     }
 }

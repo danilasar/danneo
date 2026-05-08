@@ -17,6 +17,14 @@ impl MigrationTrait for Migration {
                 Table::alter()
                     .table(CoreAdmins::Table)
                     .add_column(ColumnDef::new(CoreAdmins::Email).string().null())
+                    .to_owned(),
+            )
+            .await?;
+
+        manager
+            .alter_table(
+                Table::alter()
+                    .table(CoreAdmins::Table)
                     .add_column(
                         ColumnDef::new(CoreAdmins::Permissions)
                             .json()
@@ -31,9 +39,10 @@ impl MigrationTrait for Migration {
         // В Danneo 2.0 Rust мы можем использовать ["all"] как спец-флаг
         let update_admin = Query::update()
             .table(CoreAdmins::Table)
-            .values([
-                (CoreAdmins::Permissions, Expr::value(serde_json::json!(["all"]))),
-            ])
+            .values([(
+                CoreAdmins::Permissions,
+                Expr::value(serde_json::json!(["all"])),
+            )])
             .and_where(Expr::col(CoreAdmins::Id).eq(1))
             .to_owned();
 
@@ -48,6 +57,14 @@ impl MigrationTrait for Migration {
                 Table::alter()
                     .table(CoreAdmins::Table)
                     .drop_column(CoreAdmins::Email)
+                    .to_owned(),
+            )
+            .await?;
+
+        manager
+            .alter_table(
+                Table::alter()
+                    .table(CoreAdmins::Table)
                     .drop_column(CoreAdmins::Permissions)
                     .to_owned(),
             )

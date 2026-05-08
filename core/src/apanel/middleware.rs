@@ -1,14 +1,14 @@
-use axum::{
-    extract::{State, Request},
-    middleware::Next,
-    response::IntoResponse,
-    http::StatusCode,
-};
-use std::sync::Arc;
-use crate::state::AppState;
 use crate::auth::Claims;
 use crate::models::core_admins;
+use crate::state::AppState;
+use axum::{
+    extract::{Request, State},
+    http::StatusCode,
+    middleware::Next,
+    response::IntoResponse,
+};
 use sea_orm::EntityTrait;
+use std::sync::Arc;
 
 pub async fn admin_acl_middleware(
     claims: Claims,
@@ -34,19 +34,26 @@ pub async fn admin_acl_middleware(
     let path = request.uri().path();
     // Формат: /admin/module_name/...
     let parts: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
-    
+
     if parts.len() >= 2 && parts[0] == "admin" {
         let module = parts[1];
-        
+
         // Проверяем права через Casbin
         // sub: login, obj: module, act: view (базовый доступ к модулю), level: admin.level
-        let has_access = state.acl.enforce(&admin.login, module, "view", admin.level).await;
+        let has_access = state
+            .acl
+            .enforce(&admin.login, module, "view", admin.level)
+            .await;
 
         if has_access {
             return Ok(next.run(request).await);
         }
 
-        tracing::warn!("Access denied for admin {} to module {}", admin.login, module);
+        tracing::warn!(
+            "Access denied for admin {} to module {}",
+            admin.login,
+            module
+        );
         return Err(StatusCode::FORBIDDEN);
     }
 
