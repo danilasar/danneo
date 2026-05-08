@@ -1,0 +1,22 @@
+[package]
+name = "danneo-core"
+version = "2.0.0"
+edition = "2024"
+
+[dependencies]
+axum.workspace = true
+tokio.workspace = true
+tower-http.workspace = true
+sea-orm.workspace = true
+sea-orm-migration.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tera.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+jsonwebtoken.workspace = true
+async-trait.workspace = true
+bcrypt.workspace = true
+chrono.workspace = true
+dotenvy.workspace = true
+migration = { path = "../migration" }

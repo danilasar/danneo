@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15
+    container_name: neodanneo_db
+    environment:
+      POSTGRES_USER: danneo
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: neodanneo
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+
+volumes:
+  pg_data:

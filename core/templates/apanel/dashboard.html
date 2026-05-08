@@ -1,0 +1,15 @@
+{% extends "apanel/base.html" %}
+
+{% block content %}
+<h2>Добро пожаловать в Danneo APanel</h2>
+<p>Вы вошли как: <strong>{{ admin_id }}</strong></p>
+<p>Название сайта: <strong>{{ site_name }}</strong></p>
+
+<div class="attention">
+    <div class="attention-title">Danneo Engine</div>
+    <div class="attention-text">
+        Это модернизированная версия Danneo CMS 0.5.5, портированная на Rust.
+        Все оригинальные стили и интерфейсные решения сохранены для вашего удобства.
+    </div>
+</div>
+{% endblock %}

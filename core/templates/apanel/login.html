@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Панель управления - Danneo</title>
+    <link rel="stylesheet" href="/static/apanel/template/Lite/css/login.css">
+    <style>
+        /* Добавим стили для обработки ошибок, которых нет в оригинальном CSS */
+        cite {
+            display: none;
+            color: #d93025;
+            font-style: normal;
+            margin-top: 10px;
+            display: block;
+        }
+
+        #error-msg {
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+    <div>
+        <h1>DANNEO <strong>CMS</strong></h1>
+        <div id="login-form-container">
+            <label for="login">Логин</label>
+            <input type="text" name="adlog" id="login" maxlength="15" autofocus="autofocus"><br>
+            <label for="password">Пароль</label>
+            <input type="password" name="adpwd" id="password" maxlength="15"><br>
+            <input class="blogin" type="submit" value="Вход" onclick="performLogin()">
+
+            <cite id="error-msg">Неверный логин или пароль</cite>
+            <noscript><cite>Для работы в панели управления необходимо включить JavaScript</cite></noscript>
+        </div>
+    </div>
+    <strong>POWERED BY <a href="http://danneo.com" target="_blank">CMS DANNEO</a> 2.0 (Rust) <i>©</i> 2026</strong>
+
+    <script>
+        async function performLogin() {
+            const login = document.getElementById('login').value;
+            const password = document.getElementById('password').value;
+            const errorMsg = document.getElementById('error-msg');
+
+            errorMsg.style.display = 'none';
+
+            try {
+                const response = await fetch('/api/admin/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ login, password })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    // Сохраняем токен в Cookies для автоматической авторизации при переходах
+                    document.cookie = "danneo_token=" + data.token + "; path=/; max-age=" + (24 * 60 * 60);
+                    // Также сохраняем в localStorage для надежности
+                    localStorage.setItem('danneo_token', data.token);
+
+                    window.location.href = '/admin/dashboard';
+                } else {
+                    errorMsg.style.display = 'block';
+                }
+            } catch (err) {
+                console.error(err);
+                alert('Ошибка подключения к серверу');
+            }
+        }
+
+        // Обработка Enter
+        document.addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') {
+                performLogin();
+            }
+        });
+    </script>
+</body>
+
+</html>
