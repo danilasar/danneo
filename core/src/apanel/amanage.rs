@@ -131,7 +131,7 @@ pub async fn save_admin(
     }
 
     match active_model.save(db).await {
-        Ok(saved) => {
+        Ok(_saved) => {
             // Привязываем к группе в Casbin
             if let Some(gid) = form.group_id {
                 if let Some(group) = core_admin_groups::Entity::find_by_id(gid)

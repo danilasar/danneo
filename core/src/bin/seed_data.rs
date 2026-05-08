@@ -1,4 +1,4 @@
-use danneo_core::models::{core_block_posit, core_blocks, core_menu_groups, core_menu_items};
+use danneo_core::models::{core_blocks, core_menu_groups, core_menu_items};
 use sea_orm::{ActiveModelTrait, ColumnTrait, Database, EntityTrait, QueryFilter, Set};
 use serde_json::json;
 

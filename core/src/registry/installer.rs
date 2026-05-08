@@ -1,8 +1,5 @@
-use crate::models::core_block_definitions;
-use crate::models::core_module_entities;
-use crate::models::core_modules;
 use crate::registry::PackageRegistry;
-use sea_orm::{ActiveModelTrait, DatabaseConnection, Set, DbErr};
+use sea_orm::{ActiveModelTrait, DatabaseConnection, Set};
 use std::sync::Arc;
 
 pub struct PackageInstaller {

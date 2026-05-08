@@ -1,5 +1,5 @@
-use sea_orm::{DatabaseConnection, DbErr, ColumnTrait, EntityTrait, QueryFilter, ConnectionTrait};
-use crate::crud::{self, EntitySchema};
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+use crate::crud::{self};
 use serde_json::json;
 use axum::{extract::{Path, State, Json, Form}, response::IntoResponse, Json as AxumJson};
 use std::sync::Arc;

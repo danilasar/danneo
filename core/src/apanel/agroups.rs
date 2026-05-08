@@ -131,7 +131,7 @@ pub async fn save_group(
     State(state): State<Arc<AppState>>,
     Form(form): Form<GroupSaveForm>,
 ) -> impl IntoResponse {
-    let group_id = if let Some(id) = form.id {
+    let _group_id = if let Some(id) = form.id {
         // Обновление
         let mut group: core_admin_groups::ActiveModel = core_admin_groups::Entity::find_by_id(id)
             .one(state.db.as_ref())

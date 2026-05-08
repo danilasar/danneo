@@ -1,5 +1,5 @@
 use sea_orm::{DatabaseConnection, DbErr, Statement, ConnectionTrait, ColumnTrait};
-use sea_query::{Alias, ColumnDef, Query, SimpleExpr, Table, TableCreateStatement, PostgresQueryBuilder, MysqlQueryBuilder, SqliteQueryBuilder, QueryBuilder};
+use sea_query::{Alias, ColumnDef, Query, SimpleExpr, Table, TableCreateStatement, PostgresQueryBuilder, MysqlQueryBuilder, SqliteQueryBuilder};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -96,7 +96,7 @@ pub async fn create_entity_table(db: &DatabaseConnection, schema: &EntitySchema)
 
 /// Drop a dynamic entity table.
 pub async fn drop_entity_table(db: &DatabaseConnection, table_name: &str) -> Result<(), DbErr> {
-    let backend = db.get_database_backend();
+    let _backend = db.get_database_backend();
     let stmt = match db.get_database_backend() {
         sea_orm::DatabaseBackend::Postgres => Table::drop()
             .table(Alias::new(table_name))

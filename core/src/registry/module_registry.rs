@@ -29,7 +29,7 @@ impl ModuleRegistry {
     }
 
     pub async fn enable(&self, module_code: &str) -> Result<(), String> {
-        let mut model_opt = core_modules::Entity::find()
+        let model_opt = core_modules::Entity::find()
             .filter(core_modules::Column::Code.eq(module_code))
             .one(self.db.as_ref())
             .await
@@ -46,7 +46,7 @@ impl ModuleRegistry {
         }
 
         use crate::models::core_block_definitions;
-        let mut block_opt = core_block_definitions::Entity::find()
+        let block_opt = core_block_definitions::Entity::find()
             .filter(core_block_definitions::Column::BlockCode.eq(module_code))
             .one(self.db.as_ref())
             .await
@@ -66,7 +66,7 @@ impl ModuleRegistry {
     }
 
     pub async fn disable(&self, module_code: &str) -> Result<(), String> {
-        let mut model_opt = core_modules::Entity::find()
+        let model_opt = core_modules::Entity::find()
             .filter(core_modules::Column::Code.eq(module_code))
             .one(self.db.as_ref())
             .await
@@ -83,7 +83,7 @@ impl ModuleRegistry {
         }
 
         use crate::models::core_block_definitions;
-        let mut block_opt = core_block_definitions::Entity::find()
+        let block_opt = core_block_definitions::Entity::find()
             .filter(core_block_definitions::Column::BlockCode.eq(module_code))
             .one(self.db.as_ref())
             .await
