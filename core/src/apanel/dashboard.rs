@@ -1,8 +1,5 @@
 use crate::{auth::Claims, state::AppState};
-use axum::{
-    extract::State,
-    response::IntoResponse,
-};
+use axum::{extract::State, response::IntoResponse};
 use std::sync::Arc;
 use tera::Context;
 

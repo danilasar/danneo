@@ -2,12 +2,15 @@ use crate::registry::{PackageRegistry, ScriptEngine};
 use sea_orm::{ActiveModelTrait, DatabaseConnection, Set};
 use std::sync::Arc;
 
+use crate::state::AppState;
+
 pub struct PackageInstaller {
     db: Arc<DatabaseConnection>,
     registry: Arc<tokio::sync::RwLock<PackageRegistry>>,
     modules: Arc<tokio::sync::RwLock<crate::registry::ModuleRegistry>>,
     routes: Arc<tokio::sync::RwLock<crate::registry::RouteRegistry>>,
     script_engine: Arc<ScriptEngine>,
+    state: Arc<AppState>,
 }
 
 impl PackageInstaller {
@@ -17,6 +20,7 @@ impl PackageInstaller {
         modules: Arc<tokio::sync::RwLock<crate::registry::ModuleRegistry>>,
         routes: Arc<tokio::sync::RwLock<crate::registry::RouteRegistry>>,
         script_engine: Arc<ScriptEngine>,
+        state: Arc<AppState>,
     ) -> Self {
         Self {
             db,
@@ -24,6 +28,7 @@ impl PackageInstaller {
             modules,
             routes,
             script_engine,
+            state,
         }
     }
 
@@ -50,6 +55,7 @@ impl PackageInstaller {
                 self.script_engine.clone(),
                 self.routes.clone(),
                 packages_dir,
+                self.state.clone(),
             )
             .await;
     }
@@ -129,7 +135,7 @@ impl PackageInstaller {
                         .module
                         .as_ref()
                         .map(|m| m.runtime_type.clone())
-                        .unwrap_or_else(|| "declarative".to_string())),
+                        .unwrap_or_else(|| "lua".to_string())),
                     enabled: Set(manifest
                         .install
                         .as_ref()
@@ -224,7 +230,7 @@ impl PackageInstaller {
                     .await;
                 let _ = self
                     .script_engine
-                    .call_hook(&module_code, "on_install", script_rhai::Dynamic::UNIT)
+                    .call_hook(&module_code, "on_install", script_rhai::Dynamic::UNIT, self.state.clone())
                     .await;
             }
         }
@@ -266,7 +272,7 @@ impl PackageInstaller {
                         .module
                         .as_ref()
                         .map(|m| m.runtime_type.clone())
-                        .unwrap_or_else(|| "declarative".to_string())),
+                        .unwrap_or_else(|| "lua".to_string())),
                     enabled: Set(manifest
                         .install
                         .as_ref()
@@ -312,7 +318,7 @@ impl PackageInstaller {
                             tracing::info!("Calling on_install hook for module {}", &module_code);
                             let result = self
                                 .script_engine
-                                .call_hook(&module_code, "on_install", script_rhai::Dynamic::UNIT)
+                                .call_hook(&module_code, "on_install", script_rhai::Dynamic::UNIT, self.state.clone())
                                 .await;
                             if let Err(e) = result {
                                 tracing::error!(
@@ -358,9 +364,14 @@ impl PackageInstaller {
 
         if let Some(manifest) = block_manifest {
             let block_code = manifest.block.id.clone();
+            let module_code = if manifest.block.module_code.is_empty() {
+                None
+            } else {
+                Some(manifest.block.module_code.clone())
+            };
             let block_def_model = crate::models::core_block_definitions::ActiveModel {
                 block_code: Set(block_code.clone()),
-                module_code: Set(manifest.block.module.clone()),
+                module_code: Set(module_code),
                 package_id: Set(0),
                 version: Set(manifest.block.version.clone()),
                 enabled: Set(true),
@@ -374,7 +385,7 @@ impl PackageInstaller {
                     .block
                     .renderer
                     .clone()
-                    .unwrap_or_else(|| "declarative".to_string())),
+                    .unwrap_or_else(|| "lua".to_string())),
                 ..Default::default()
             };
 
@@ -392,7 +403,13 @@ impl PackageInstaller {
     pub async fn uninstall(&self, package_id: &str) -> Result<(), String> {
         use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 
-        // Delete module record and clean up dynamic entities
+        // 1. Call on_uninstall hook
+        let _ = self
+            .script_engine
+            .call_hook(package_id, "on_uninstall", script_rhai::Dynamic::UNIT, self.state.clone())
+            .await;
+
+        // 2. Delete module record and clean up dynamic entities
         let module_res = crate::models::core_modules::Entity::delete_many()
             .filter(crate::models::core_modules::Column::Code.eq(package_id))
             .exec(self.db.as_ref())

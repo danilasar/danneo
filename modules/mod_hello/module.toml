@@ -7,9 +7,9 @@ description = "A simple demonstration module"
 author = "Gemini CLI"
 
 [module]
-runtime_type = "declarative"
+runtime_type = "lua"
 
 [entrypoints]
+hooks = "scripts/hooks.lua"
 entities = "entities/greeting.json"
-admin_menu = "admin_menu.json"
 frontend_routes = "routes/frontend.json"

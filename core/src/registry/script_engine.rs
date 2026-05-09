@@ -1,4 +1,4 @@
-use mlua::{Function, HookTriggers, Lua, LuaSerdeExt, Value, VmState};
+use mlua::{HookTriggers, Lua, LuaSerdeExt, Value, VmState};
 use sea_orm::DatabaseConnection;
 use serde_json::json;
 use std::collections::HashMap;
@@ -19,6 +19,12 @@ pub enum ScriptError {
     Io(#[from] std::io::Error),
     #[error("Hook not found: {0}")]
     HookNotFound(String),
+}
+
+impl From<mlua::Error> for ScriptError {
+    fn from(error: mlua::Error) -> Self {
+        ScriptError::Runtime(error.to_string())
+    }
 }
 
 const MAX_LUA_INSTRUCTIONS: usize = 100_000;
@@ -153,13 +159,18 @@ impl DatabaseApi {
 pub struct ScriptEngine {
     scripts: Arc<RwLock<HashMap<String, String>>>,
     db: Arc<DatabaseConnection>,
+    rpc_registry: Arc<crate::rpc::registry::RpcRegistry>,
 }
 
 impl ScriptEngine {
-    pub fn new(db: Arc<DatabaseConnection>) -> Self {
+    pub fn new(
+        db: Arc<DatabaseConnection>,
+        rpc_registry: Arc<crate::rpc::registry::RpcRegistry>,
+    ) -> Self {
         Self {
             scripts: Arc::new(RwLock::new(HashMap::new())),
             db,
+            rpc_registry,
         }
     }
 
@@ -200,88 +211,112 @@ impl ScriptEngine {
         module_code: &str,
         script: &str,
     ) -> Result<(), ScriptError> {
-        Lua::new()
-            .load(script)
-            .into_function()
-            .map_err(|e| ScriptError::Parse(e.to_string()))?;
-
         let mut scripts = self.scripts.write().await;
         scripts.insert(module_code.to_string(), script.to_string());
         Ok(())
     }
 
-    /// Вызывает функцию (хук) из скрипта модуля
     pub async fn call_hook(
         &self,
         module_code: &str,
         hook_name: &str,
-        arg: script_rhai::Dynamic,
+        args: script_rhai::Dynamic,
+        state: Arc<crate::state::AppState>,
     ) -> Result<script_rhai::Dynamic, ScriptError> {
         let script = {
             let scripts = self.scripts.read().await;
-            scripts.get(module_code).cloned().ok_or_else(|| {
-                ScriptError::HookNotFound(format!("No scripts loaded for module: {}", module_code))
-            })?
+            scripts
+                .get(module_code)
+                .cloned()
+                .ok_or_else(|| ScriptError::HookNotFound(module_code.to_string()))?
         };
 
         let lua = Lua::new();
-        let instruction_count = Arc::new(AtomicUsize::new(0));
-        let hook_count = instruction_count.clone();
-        lua.set_global_hook(
-            HookTriggers::new().every_nth_instruction(1_000),
-            move |_, _| {
-                let count = hook_count.fetch_add(1_000, Ordering::Relaxed) + 1_000;
-                if count > MAX_LUA_INSTRUCTIONS {
-                    Err(mlua::Error::RuntimeError(
-                        "Too many operations in Lua script".to_string(),
-                    ))
-                } else {
-                    Ok(VmState::Continue)
-                }
+
+        // Ограничение по инструкциям
+        let count = Arc::new(AtomicUsize::new(0));
+        let count_clone = count.clone();
+        lua.set_hook(
+            HookTriggers {
+                every_nth_instruction: Some(1000),
+                ..Default::default()
             },
-        )
-        .map_err(|e| ScriptError::Runtime(e.to_string()))?;
+            move |_, _| {
+                if count_clone.fetch_add(1000, Ordering::Relaxed) > MAX_LUA_INSTRUCTIONS {
+                    return Err(mlua::Error::RuntimeError(
+                        "Max Lua instructions reached".into(),
+                    ));
+                }
+                Ok(VmState::Continue)
+            },
+        );
 
         DatabaseApi {
             db: self.db.clone(),
             module_code: module_code.to_string(),
         }
-        .register(&lua)
-        .map_err(|e| ScriptError::Runtime(e.to_string()))?;
+        .register(&lua)?;
 
-        lua.load(&script)
-            .exec_async()
-            .await
-            .map_err(|e| ScriptError::Runtime(e.to_string()))?;
+        // rpc bridge
+        let rpc_table = lua.create_table()?;
+        let rpc_reg = self.rpc_registry.clone();
+        let state_clone = state.clone();
+        rpc_table.set(
+            "call",
+            lua.create_async_function(
+                move |lua,
+                      (namespace, method, payload, _context): (
+                    String,
+                    String,
+                    Value,
+                    Option<Value>,
+                )| {
+                    let rpc = rpc_reg.clone();
+                    let st = state_clone.clone();
+                    async move {
+                        let ctx = crate::rpc::RpcContext::default();
+                        let res = rpc
+                            .call(
+                                &namespace,
+                                &method,
+                                lua.from_value(payload).unwrap_or(serde_json::Value::Null),
+                                ctx,
+                                st,
+                            )
+                            .await;
+                        match res {
+                            Ok(v) => lua.to_value(&v),
+                            Err(e) => Err(mlua::Error::RuntimeError(e.to_string())),
+                        }
+                    }
+                },
+            )?,
+        )?;
+        lua.globals().set("rpc", rpc_table)?;
 
-        let hook: Function = lua.globals().get(hook_name).map_err(|_| {
-            ScriptError::HookNotFound(format!("Hook not found: {}::{}", module_code, hook_name))
-        })?;
+        lua.load(&script).exec_async().await?;
 
-        let arg = if arg.is_unit() {
-            Value::Nil
-        } else {
-            let json_arg = script_rhai::serde::from_dynamic::<serde_json::Value>(&arg)
-                .map_err(|e| ScriptError::Runtime(e.to_string()))?;
-            lua.to_value(&json_arg)
-                .map_err(|e| ScriptError::Runtime(e.to_string()))?
+        let globals = lua.globals();
+        let hook: mlua::Function = match globals.get(hook_name) {
+            Ok(f) => f,
+            Err(_) => return Err(ScriptError::HookNotFound(hook_name.to_string())),
         };
 
-        let result: Value = hook
-            .call_async(arg)
-            .await
+        // Convert Dynamic to Lua Value
+        let json_value: serde_json::Value = script_rhai::serde::from_dynamic(&args)
+            .map_err(|e| ScriptError::Runtime(e.to_string()))?;
+        let lua_args = lua
+            .to_value(&json_value)
             .map_err(|e| ScriptError::Runtime(e.to_string()))?;
 
-        let result = match result {
-            Value::Nil => script_rhai::Dynamic::UNIT,
-            value => {
-                let json_value: serde_json::Value = lua
-                    .from_value(value)
-                    .map_err(|e| ScriptError::Runtime(e.to_string()))?;
-                script_rhai::serde::to_dynamic(json_value)
-                    .map_err(|e| ScriptError::Runtime(e.to_string()))?
-            }
-        };
+        let res: Value = hook.call_async(lua_args).await?;
+
+        // Convert Lua Value back to Dynamic via JSON
+        let json_value: serde_json::Value = lua
+            .from_value(res)
+            .map_err(|e| ScriptError::Runtime(e.to_string()))?;
+        let result = script_rhai::serde::to_dynamic(json_value)
+            .map_err(|e| ScriptError::Runtime(e.to_string()))?;
 
         Ok(result)
     }

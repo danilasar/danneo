@@ -208,6 +208,7 @@ pub async fn install_from_staging_handle(
         state.modules.clone(),
         state.routes.clone(),
         state.script_engine.clone(),
+        state.clone(),
     );
     let staging_path = std::path::PathBuf::from(&form.staging_path);
     match installer
@@ -232,6 +233,7 @@ pub async fn install_module(
         state.modules.clone(),
         state.routes.clone(),
         state.script_engine.clone(),
+        state.clone(),
     );
     if let Err(e) = installer.install(&form.package_id).await {
         tracing::error!("Install error: {}", e);
@@ -249,6 +251,7 @@ pub async fn uninstall_module(
         state.modules.clone(),
         state.routes.clone(),
         state.script_engine.clone(),
+        state.clone(),
     );
     if let Err(e) = installer.uninstall(&form.package_id).await {
         tracing::error!("Uninstall error: {}", e);
@@ -266,6 +269,7 @@ pub async fn enable_module(
         state.modules.clone(),
         state.routes.clone(),
         state.script_engine.clone(),
+        state.clone(),
     );
 
     let res = {
@@ -279,6 +283,35 @@ pub async fn enable_module(
         }
         Err(e) => {
             tracing::error!("Enable error: {}", e);
+        }
+    }
+    Redirect::to("/admin/modules")
+}
+
+pub async fn disable_module(
+    State(state): State<Arc<AppState>>,
+    Form(form): Form<ModuleActionForm>,
+) -> impl IntoResponse {
+    let installer = crate::registry::PackageInstaller::new(
+        state.db.clone(),
+        state.packages.clone(),
+        state.modules.clone(),
+        state.routes.clone(),
+        state.script_engine.clone(),
+        state.clone(),
+    );
+
+    let res = {
+        let modules = state.modules.read().await;
+        modules.disable(&form.package_id).await
+    };
+
+    match res {
+        Ok(_) => {
+            installer.refresh_registries().await;
+        }
+        Err(e) => {
+            tracing::error!("Disable error: {}", e);
         }
     }
     Redirect::to("/admin/modules")
@@ -307,9 +340,10 @@ pub async fn dispatch_admin(
 
     match state
         .script_engine
-        .call_hook(&module, "admin_dispatch", dynamic_arg)
+        .call_hook(&module, "admin_dispatch", dynamic_arg, state.clone())
         .await
     {
+
         Ok(res) => {
             if let Some(res_map) = res.clone().try_cast::<script_rhai::Map>() {
                 let template = res_map

@@ -1,9 +1,18 @@
 use crate::state::AppState;
 use async_trait::async_trait;
 use axum::Router;
+use serde_json::Value;
 use std::sync::Arc;
 
+pub mod admin_menu;
 pub mod native_demo;
+
+#[derive(Clone, Debug)]
+pub struct NativeBlockDefinition {
+    pub block_code: &'static str,
+    pub version: &'static str,
+    pub settings_schema: Option<Value>,
+}
 
 /// Базовый трейт, который должен реализовать каждый модуль Danneo.
 /// Он определяет жизненный цикл и интеграцию модуля в систему.
@@ -13,9 +22,17 @@ pub trait DanneoModule: Send + Sync {
     fn name(&self) -> &'static str;
 
     /// Инициализация модуля (вызывается при старте приложения).
-    /// Здесь модуль должен проверять и накатывать свои миграции БД.
     async fn init(&self, _state: Arc<AppState>) -> Result<(), String> {
-        // По умолчанию ничего не делаем
+        Ok(())
+    }
+
+    /// Вызывается один раз при установке модуля.
+    async fn on_install(&self, _state: Arc<AppState>) -> Result<(), String> {
+        Ok(())
+    }
+
+    /// Вызывается один раз при удалении модуля.
+    async fn on_uninstall(&self, _state: Arc<AppState>) -> Result<(), String> {
         Ok(())
     }
 
@@ -29,6 +46,37 @@ pub trait DanneoModule: Send + Sync {
     /// Возвращает Router, который ядро примонтирует к пути /admin/<module_name>
     fn register_admin_routes(&self) -> Router<Arc<AppState>> {
         Router::new()
+    }
+
+    /// Блоки, предоставляемые native-модулем.
+    fn block_definitions(&self) -> Vec<NativeBlockDefinition> {
+        Vec::new()
+    }
+
+    /// Рендеринг native-блока, принадлежащего модулю.
+    async fn render_block(
+        &self,
+        _block_code: &str,
+        _ctx: Arc<crate::blocks::BlockContext>,
+        _settings: Option<Value>,
+    ) -> Option<String> {
+        None
+    }
+
+    /// Регистрация RPC методов модуля.
+    fn rpc_methods(&self) -> Vec<crate::rpc::RpcMethodDescriptor> {
+        Vec::new()
+    }
+
+    /// Вызов RPC метода (для native модулей).
+    async fn call_rpc(
+        &self,
+        _method: &str,
+        _payload: serde_json::Value,
+        _ctx: crate::rpc::RpcContext,
+        _state: Arc<AppState>,
+    ) -> Result<serde_json::Value, crate::rpc::RpcError> {
+        Err(crate::rpc::RpcError::NotFound("Native RPC not implemented".to_string()))
     }
 }
 

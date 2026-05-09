@@ -27,11 +27,47 @@ function on_install(arg)
         title = "Добро пожаловать в Danneo 2!",
         content = "Это первая новость, созданная через расширенный модуль новостей на скриптах.",
     })
+
+    -- Register in Admin Menu via RPC
+    rpc.call("admin_menu", "ensure_category", {
+        code = "news",
+        parent = "content",
+        label = "admin_news",
+        icon = "news.gif",
+        weight = 20
+    })
+
+    rpc.call("admin_menu", "register_items", {
+        module = "mod_news",
+        items = {
+            {
+                code = "list",
+                category = "news",
+                label = "admin_list",
+                link = "/admin/m/mod_news/list",
+                weight = 10
+            },
+            {
+                code = "add",
+                category = "news",
+                label = "admin_add",
+                link = "/admin/m/mod_news/add",
+                weight = 20
+            }
+        }
+    })
 end
 
 function on_uninstall(arg)
+    print("Uninstalling News module...")
     db.drop_table("news")
     db.drop_table("categories")
+
+    -- Clean up Admin Menu via RPC
+    rpc.call("admin_menu", "unregister_module", {
+        module = "mod_news",
+        mode = "remove"
+    })
 end
 
 function admin_dispatch(arg)
@@ -99,4 +135,30 @@ function frontend_dispatch(arg)
     end
 
     return "Frontend path: " .. tostring(path)
+end
+
+function render_block(arg)
+    local block_code = arg.block_code
+    local settings = arg.settings or {}
+
+    if block_code == "b-News" then
+        local limit = settings.limit or 5
+        local news = db.select("news", { "id", "title", "created_at" })
+        -- Simple sort and limit (in a real system this would be in SQL)
+        table.sort(news, function(a, b) return a.created_at > b.created_at end)
+        local recent = {}
+        for i = 1, math.min(#news, limit) do
+            table.insert(recent, news[i])
+        end
+
+        return {
+            template = "block.html",
+            context = {
+                news = recent,
+                title = "Последние новости"
+            }
+        }
+    end
+
+    return "Unknown block: " .. tostring(block_code)
 end

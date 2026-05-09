@@ -1,6 +1,6 @@
+use crate::registry::RouteDescriptor;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use crate::registry::RouteDescriptor;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PackageManifest {
@@ -13,6 +13,13 @@ pub struct PackageManifest {
     pub capabilities: Option<Capabilities>,
     pub frontend_routes: Option<Vec<RouteDescriptor>>,
     pub admin_routes: Option<Vec<RouteDescriptor>>,
+    pub rpc: Option<RpcManifest>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RpcManifest {
+    pub namespace: String,
+    pub methods: Vec<crate::rpc::RpcMethodDescriptor>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -29,7 +36,7 @@ pub struct PackageInfo {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModuleInfo {
-    pub runtime_type: String, // "declarative", "scripted", "native"
+    pub runtime_type: String, // "lua", "native"
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -57,22 +64,57 @@ pub struct Entrypoints {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AdminMenu {
-    pub groups: Vec<AdminMenuGroup>,
+pub struct AdminMenuManifest {
+    pub categories: Option<Vec<CategoryContribution>>,
+    pub items: Option<Vec<ItemContribution>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AdminMenuGroup {
-    pub id: String,
-    pub name: String,
+pub struct CategoryContribution {
+    pub code: String,
+    pub parent: String, // Код надкатегории
+    pub label: String,
     pub icon: Option<String>,
+    pub weight: Option<i32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ItemContribution {
+    pub code: String,     // Уникальный код пункта (например, news.list)
+    pub category: String, // Код категории
+    pub label: String,
+    pub link: String,
+    pub weight: Option<i32>,
+    pub acl_key: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AdminMenu {
+    pub supercategories: Vec<AdminMenuSupercategory>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AdminMenuSupercategory {
+    pub code: String,
+    pub label: String,
+    pub weight: i32,
+    pub categories: Vec<AdminMenuCategory>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AdminMenuCategory {
+    pub code: String,
+    pub label: String,
+    pub icon: Option<String>,
+    pub weight: i32,
     pub items: Vec<AdminMenuItem>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AdminMenuItem {
-    pub name: String,
+    pub label: String,
     pub link: String,
+    pub weight: i32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -95,7 +137,8 @@ pub struct BlockManifest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BlockInfo {
     pub id: String,
-    pub module: Option<String>,
+    #[serde(alias = "module", default)]
+    pub module_code: String, // Код модуля-поставщика
     pub name: String,
     pub version: String,
     pub template: Option<String>,

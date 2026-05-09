@@ -1,5 +1,6 @@
 use crate::models::core_modules;
 use crate::registry::{AdminMenu, RouteDescriptor, RouteRegistry, ScriptEngine};
+use async_trait::async_trait;
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, IntoActiveModel, QueryFilter,
     Set,
@@ -11,13 +12,21 @@ use std::sync::Arc;
 pub struct ModuleRegistry {
     pub db: Arc<DatabaseConnection>,
     pub admin_menus: Arc<tokio::sync::RwLock<HashMap<String, AdminMenu>>>,
+    pub admin_menu: Arc<crate::module::admin_menu::AdminMenuModule>,
+    pub rpc_registry: Arc<crate::rpc::registry::RpcRegistry>,
 }
 
 impl ModuleRegistry {
-    pub fn new(db: Arc<DatabaseConnection>) -> Self {
+    pub fn new(
+        db: Arc<DatabaseConnection>,
+        admin_menu: Arc<crate::module::admin_menu::AdminMenuModule>,
+        rpc_registry: Arc<crate::rpc::registry::RpcRegistry>,
+    ) -> Self {
         Self {
             db,
             admin_menus: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
+            admin_menu,
+            rpc_registry,
         }
     }
 
@@ -26,9 +35,10 @@ impl ModuleRegistry {
         script_engine: Arc<ScriptEngine>,
         routes: Arc<tokio::sync::RwLock<RouteRegistry>>,
         packages_dir: PathBuf,
+        state: Arc<crate::state::AppState>,
     ) {
         tracing::info!("Initializing ModuleRegistry");
-        self.admin_menus.write().await.clear(); // Clear existing menus before loading fresh ones
+        self.admin_menus.write().await.clear();
 
         match core_modules::Entity::find()
             .filter(core_modules::Column::Enabled.eq(true))
@@ -91,15 +101,38 @@ impl ModuleRegistry {
                                     if let Some(menu_path) = entry.admin_menu {
                                         let full_path = module_path.join(menu_path);
                                         if let Ok(content) = std::fs::read_to_string(&full_path) {
-                                            if let Ok(menu) =
-                                                serde_json::from_str::<AdminMenu>(&content)
-                                            {
-                                                self.admin_menus
-                                                    .write()
-                                                    .await
-                                                    .insert(module.code.clone(), menu);
+                                            if let Ok(menu_manifest) = serde_json::from_str::<
+                                                crate::registry::AdminMenuManifest,
+                                            >(
+                                                &content
+                                            ) {
+                                                let _ = self
+                                                    .admin_menu
+                                                    .process_contribution(
+                                                        &module.code,
+                                                        menu_manifest,
+                                                    )
+                                                    .await;
                                             }
                                         }
+                                    }
+                                }
+
+                                // 5. Register RPC methods
+                                if let Some(rpc) = manifest.rpc {
+                                    let runtime_type = manifest
+                                        .module
+                                        .as_ref()
+                                        .map(|m| m.runtime_type.as_str())
+                                        .unwrap_or("lua");
+                                    if runtime_type == "lua" {
+                                        let handler = Arc::new(LuaRpcHandler {
+                                            module_code: module.code.clone(),
+                                            script_engine: script_engine.clone(),
+                                        });
+                                        self.rpc_registry
+                                            .register(&rpc.namespace, handler, rpc.methods)
+                                            .await;
                                     }
                                 }
                             }
@@ -185,5 +218,42 @@ impl ModuleRegistry {
         }
 
         Err(format!("Package {} not found", module_code))
+    }
+}
+
+struct LuaRpcHandler {
+    module_code: String,
+    script_engine: Arc<crate::registry::ScriptEngine>,
+}
+
+#[async_trait]
+impl crate::rpc::registry::RpcHandler for LuaRpcHandler {
+    async fn call(
+        &self,
+        method: &str,
+        payload: serde_json::Value,
+        ctx: crate::rpc::RpcContext,
+        state: Arc<crate::state::AppState>,
+    ) -> Result<serde_json::Value, crate::rpc::RpcError> {
+        let arg = serde_json::json!({
+            "method": method,
+            "payload": payload,
+            "context": {
+                "caller": ctx.caller,
+                "trace_id": ctx.trace_id,
+                "call_depth": ctx.call_depth,
+            }
+        });
+
+        let dynamic_arg = script_rhai::serde::to_dynamic(arg).unwrap();
+        match self
+            .script_engine
+            .call_hook(&self.module_code, "rpc_dispatch", dynamic_arg, state)
+            .await
+        {
+            Ok(res) => script_rhai::serde::from_dynamic::<serde_json::Value>(&res)
+                .map_err(|e| crate::rpc::RpcError::Runtime(e.to_string())),
+            Err(e) => Err(crate::rpc::RpcError::Runtime(e.to_string())),
+        }
     }
 }

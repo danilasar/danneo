@@ -6,11 +6,10 @@ description = "Full featured news module with categories and articles"
 type = "module"
 
 [module]
-runtime_type = "script"
+runtime_type = "lua"
 
 [entrypoints]
 hooks = "scripts/hooks.lua"
-admin_menu = "admin_menu.json"
 
 [[frontend_routes]]
 name = "news_list"

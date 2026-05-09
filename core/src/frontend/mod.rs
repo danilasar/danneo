@@ -1,5 +1,5 @@
 use crate::state::AppState;
-use axum::extract::{Path, State};
+use axum::extract::State;
 use axum::response::{Html, IntoResponse};
 use sea_orm::ConnectionTrait;
 use std::sync::Arc;
@@ -89,9 +89,10 @@ async fn render_script_route(
 
     match state
         .script_engine
-        .call_hook(module_code, "frontend_dispatch", dynamic_arg)
+        .call_hook(module_code, "frontend_dispatch", dynamic_arg, state.clone())
         .await
     {
+
         Ok(res) => {
             if let Some(res_map) = res.clone().try_cast::<script_rhai::Map>() {
                 let template = res_map

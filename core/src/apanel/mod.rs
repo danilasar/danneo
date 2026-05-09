@@ -55,41 +55,7 @@ pub async fn prepare_admin_context(state: Arc<AppState>, context: &mut Context) 
     let settings = state.settings.read().await;
     context.insert("site_name", &settings.site_name);
 
-    // Collect module menus
-    let modules = state.modules.read().await;
-    let menus = modules.admin_menus.read().await;
-
-    // Group items by group_id
-    let mut menu_groups: std::collections::HashMap<String, Vec<crate::registry::AdminMenuItem>> =
-        std::collections::HashMap::new();
-    let mut group_names: std::collections::HashMap<String, String> =
-        std::collections::HashMap::new();
-
-    for (_, menu) in menus.iter() {
-        for group in &menu.groups {
-            group_names.insert(group.id.clone(), group.name.clone());
-            let items = menu_groups.entry(group.id.clone()).or_default();
-            for item in &group.items {
-                items.push(item.clone());
-            }
-        }
-    }
-
-    #[derive(serde::Serialize)]
-    struct MenuViewModel {
-        id: String,
-        name: String,
-        items: Vec<crate::registry::AdminMenuItem>,
-    }
-
-    let mut view_groups = Vec::new();
-    for (id, items) in menu_groups {
-        view_groups.push(MenuViewModel {
-            name: group_names.get(&id).cloned().unwrap_or(id.clone()),
-            id,
-            items,
-        });
-    }
-
-    context.insert("module_menus", &view_groups);
+    // Collect module menus using AdminMenu module
+    let menu = state.admin_menu.build_menu(None, None).await;
+    context.insert("admin_menu", &menu.supercategories);
 }

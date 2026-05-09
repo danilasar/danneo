@@ -1,9 +1,10 @@
 use crate::acl::service::AclService;
 use crate::models::core_settings;
+use crate::module::DanneoModule;
 use sea_orm::{DatabaseConnection, EntityTrait};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 use tera::{Function, Result as TeraResult, Tera, Value};
 
@@ -28,12 +29,19 @@ pub struct AppState {
     pub modules: Arc<tokio::sync::RwLock<crate::registry::ModuleRegistry>>,
     pub routes: Arc<tokio::sync::RwLock<crate::registry::RouteRegistry>>,
     pub script_engine: Arc<crate::registry::ScriptEngine>,
+    pub admin_menu: Arc<crate::module::admin_menu::AdminMenuModule>,
+    pub rpc_registry: Arc<crate::rpc::registry::RpcRegistry>,
 }
 
 impl AppState {
     pub async fn new(db: DatabaseConnection) -> Result<Self, String> {
         let db_arc = Arc::new(db);
-        let script_engine = Arc::new(crate::registry::ScriptEngine::new(db_arc.clone()));
+        let rpc_registry = Arc::new(crate::rpc::registry::RpcRegistry::new());
+
+        let script_engine = Arc::new(crate::registry::ScriptEngine::new(
+            db_arc.clone(),
+            rpc_registry.clone(),
+        ));
         // Пытаемся загрузить настройки из БД
         let settings_records = core_settings::Entity::find()
             .all(db_arc.as_ref())
@@ -119,7 +127,7 @@ impl AppState {
             "core/blocks"
         };
 
-        // Загружаем шаблоны модулей
+        // Загружаем шаблоны модулей и их блоков
         let m_glob = format!("{}/*/templates/**/*", packages_dir);
         for entry in glob::glob(&m_glob).map_err(|e| e.to_string())? {
             if let Ok(path) = entry {
@@ -133,7 +141,7 @@ impl AppState {
                             let rest: PathBuf = parts[3..].iter().collect();
                             let name = format!("{}/{}/{}", module, theme, rest.to_string_lossy())
                                 .replace('\\', "/");
-                            tera.add_template_file(path, Some(&name)).map_err(|e| {
+                            tera.add_template_file(&path, Some(&name)).map_err(|e| {
                                 format!("Failed to add module template {}: {}", name, e)
                             })?;
                         }
@@ -142,42 +150,154 @@ impl AppState {
             }
         }
 
-        // Загружаем шаблоны блоков
-        let b_glob = format!("{}/*/templates/**/*", blocks_dir);
-        for entry in glob::glob(&b_glob).map_err(|e| e.to_string())? {
+        let block_template_glob = format!("{}/*/blocks/*/templates/**/*", packages_dir);
+        for entry in glob::glob(&block_template_glob).map_err(|e| e.to_string())? {
             if let Ok(path) = entry {
                 if path.is_file() {
-                    if let Ok(rel_path) = path.strip_prefix(blocks_dir) {
+                    if let Ok(rel_path) = path.strip_prefix(packages_dir) {
                         let parts: Vec<_> = rel_path.components().collect();
-                        if parts.len() >= 4 {
-                            // parts: [Block, "templates", Theme, Template...]
-                            let block = parts[0].as_os_str().to_string_lossy();
-                            let theme = parts[2].as_os_str().to_string_lossy();
-                            let rest: PathBuf = parts[3..].iter().collect();
-                            let name = format!("{}/{}/{}", block, theme, rest.to_string_lossy())
-                                .replace('\\', "/");
-                            tera.add_template_file(path, Some(&name)).map_err(|e| {
+                        if parts.len() >= 5 {
+                            // parts: [Module, "blocks", Block, "templates", Template...]
+                            let module = parts[0].as_os_str().to_string_lossy();
+                            let block = parts[2].as_os_str().to_string_lossy();
+                            let rest: PathBuf = parts[4..].iter().collect();
+                            let name =
+                                format!("{}/blocks/{}/{}", module, block, rest.to_string_lossy())
+                                    .replace('\\', "/");
+                            tera.add_template_file(&path, Some(&name)).map_err(|e| {
                                 format!("Failed to add block template {}: {}", name, e)
                             })?;
+
+                            if parts.len() >= 6 {
+                                // parts: [Module, "blocks", Block, "templates", Theme, Template...]
+                                let theme = parts[4].as_os_str().to_string_lossy();
+                                let themed_rest: PathBuf = parts[5..].iter().collect();
+                                let themed_name = format!(
+                                    "{}/{}/blocks/{}/{}",
+                                    module,
+                                    theme,
+                                    block,
+                                    themed_rest.to_string_lossy()
+                                )
+                                .replace('\\', "/");
+                                tera.add_template_file(&path, Some(&themed_name))
+                                    .map_err(|e| {
+                                        format!(
+                                            "Failed to add themed block template {}: {}",
+                                            themed_name, e
+                                        )
+                                    })?;
+                            }
                         }
                     }
                 }
             }
         }
 
-        let mut package_registry = crate::registry::PackageRegistry::new(packages_dir, blocks_dir);
+        let standalone_block_template_glob = format!("{}/*/templates/**/*", blocks_dir);
+        for entry in glob::glob(&standalone_block_template_glob).map_err(|e| e.to_string())? {
+            if let Ok(path) = entry {
+                if path.is_file() {
+                    if let Ok(rel_path) = path.strip_prefix(blocks_dir) {
+                        let parts: Vec<_> = rel_path.components().collect();
+                        if parts.len() >= 3 {
+                            // parts: [Block, "templates", Template...]
+                            let block = parts[0].as_os_str().to_string_lossy();
+                            let rest: PathBuf = parts[2..].iter().collect();
+                            let names = [
+                                format!("{}/{}", block, rest.to_string_lossy()).replace('\\', "/"),
+                                format!("{}/templates/{}", block, rest.to_string_lossy())
+                                    .replace('\\', "/"),
+                            ];
+
+                            for name in names {
+                                tera.add_template_file(&path, Some(&name)).map_err(|e| {
+                                    format!(
+                                        "Failed to add standalone block template {}: {}",
+                                        name, e
+                                    )
+                                })?;
+                            }
+
+                            if parts.len() >= 4 {
+                                // parts: [Block, "templates", Theme, Template...]
+                                let theme = parts[2].as_os_str().to_string_lossy();
+                                let themed_rest: PathBuf = parts[3..].iter().collect();
+                                let themed_name = format!(
+                                    "{}/{}/{}",
+                                    block,
+                                    theme,
+                                    themed_rest.to_string_lossy()
+                                )
+                                .replace('\\', "/");
+                                tera.add_template_file(&path, Some(&themed_name))
+                                    .map_err(|e| {
+                                        format!(
+                                            "Failed to add themed standalone block template {}: {}",
+                                            themed_name, e
+                                        )
+                                    })?;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        let mut package_registry = crate::registry::PackageRegistry::new(packages_dir);
         package_registry.scan();
         let packages = Arc::new(tokio::sync::RwLock::new(package_registry));
 
         let route_registry = crate::registry::RouteRegistry::new();
         let routes = Arc::new(tokio::sync::RwLock::new(route_registry));
 
-        let module_registry = crate::registry::ModuleRegistry::new(db_arc.clone());
+        let rpc_registry = Arc::new(crate::rpc::registry::RpcRegistry::new());
+
+        let script_engine = Arc::new(crate::registry::ScriptEngine::new(
+            db_arc.clone(),
+            rpc_registry.clone(),
+        ));
+
+        let admin_menu = Arc::new(crate::module::admin_menu::AdminMenuModule::new(
+            db_arc.clone(),
+        ));
+        
+        // Initialize AdminMenu (migrations + defaults)
+        let state_arc_tmp = Arc::new(Self {
+            db: db_arc.clone(),
+            settings: settings.clone(),
+            tera: Arc::new(tera.clone()),
+            block_registry: Arc::new(crate::registry::BlockRegistry::new(db_arc.clone(), script_engine.clone())),
+            jwt_secret: jwt_secret.clone(),
+            acl: acl.clone(),
+            packages: Arc::new(tokio::sync::RwLock::new(crate::registry::PackageRegistry::new(packages_dir))),
+            modules: Arc::new(tokio::sync::RwLock::new(crate::registry::ModuleRegistry::new(db_arc.clone(), admin_menu.clone(), rpc_registry.clone()))),
+            routes: routes.clone(),
+            script_engine: script_engine.clone(),
+            admin_menu: admin_menu.clone(),
+            rpc_registry: rpc_registry.clone(),
+        });
+        
+        admin_menu.init(state_arc_tmp.clone()).await.map_err(|e| format!("Failed to init admin_menu: {}", e))?;
+
+        // Register admin_menu in RPC registry
+        rpc_registry.register(
+            "admin_menu", 
+            Arc::new(crate::rpc::registry::NativeRpcHandler::new(admin_menu.clone())),
+            admin_menu.rpc_methods()
+        ).await;
+
+        let module_registry = crate::registry::ModuleRegistry::new(
+            db_arc.clone(),
+            admin_menu.clone(),
+            rpc_registry.clone(),
+        );
         module_registry
             .init(
                 script_engine.clone(),
                 routes.clone(),
                 std::path::PathBuf::from(packages_dir),
+                state_arc_tmp,
             )
             .await;
         let modules = Arc::new(tokio::sync::RwLock::new(module_registry));
@@ -198,6 +318,8 @@ impl AppState {
             modules,
             routes,
             script_engine,
+            admin_menu,
+            rpc_registry,
         })
     }
 }

@@ -2,8 +2,8 @@
 id = "b-News"
 name = "Последние новости"
 version = "1.0.0"
-template = "templates/block.html"
-renderer = "declarative"
+template = "blocks/b-News/block.html"
+renderer = "lua"
 
 [[setting]]
 key = "limit"

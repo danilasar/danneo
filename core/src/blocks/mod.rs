@@ -1,4 +1,4 @@
-use crate::state::GlobalSettings;
+use crate::state::{AppState, GlobalSettings};
 use async_trait::async_trait;
 use sea_orm::DatabaseConnection;
 use serde_json::Value;
@@ -10,6 +10,7 @@ pub mod menu;
 pub struct BlockContext {
     pub db: Arc<DatabaseConnection>,
     pub settings: Arc<tokio::sync::RwLock<GlobalSettings>>,
+    pub state: Arc<AppState>,
 }
 
 #[async_trait]

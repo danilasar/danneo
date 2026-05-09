@@ -5,8 +5,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct Claims {
     pub admin_id: i32,
-    pub exp: usize, // Timestamp окончания жизни токена
-    pub iat: usize, // Timestamp выпуска токена
+    pub exp: usize,  // Timestamp окончания жизни токена
+    pub iat: usize,  // Timestamp выпуска токена
     pub jti: String, // Уникальный идентификатор токена (JWT ID)
 }
 

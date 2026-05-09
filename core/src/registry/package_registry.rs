@@ -1,23 +1,21 @@
 use crate::registry::manifest::{BlockManifest, PackageManifest};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use tracing::{error, info, warn};
+use tracing::{error, info};
 
 pub struct PackageRegistry {
     pub packages_dir: PathBuf,
-    pub blocks_dir: PathBuf,
     pub staging_dir: PathBuf,
     pub packages: HashMap<String, PackageManifest>,
     pub blocks: HashMap<String, BlockManifest>,
 }
 
 impl PackageRegistry {
-    pub fn new(packages_dir: impl Into<PathBuf>, blocks_dir: impl Into<PathBuf>) -> Self {
+    pub fn new(packages_dir: impl Into<PathBuf>) -> Self {
         let pkg_dir = packages_dir.into();
         let staging_dir = pkg_dir.join("staging");
         Self {
             packages_dir: pkg_dir,
-            blocks_dir: blocks_dir.into(),
             staging_dir,
             packages: HashMap::new(),
             blocks: HashMap::new(),
@@ -25,7 +23,6 @@ impl PackageRegistry {
     }
 
     pub fn scan(&mut self) {
-        // ... existing scan logic (to be updated later if needed)
         self.packages.clear();
         self.blocks.clear();
 
@@ -40,59 +37,55 @@ impl PackageRegistry {
                             match self.load_package_manifest(&manifest_path) {
                                 Ok(manifest) => {
                                     info!("Loaded package manifest: {}", manifest.package.id);
-                                    self.packages.insert(manifest.package.id.clone(), manifest);
-                                }
-                                Err(e) => {
-                                    error!(
-                                        "Failed to load package manifest from {}: {}",
-                                        manifest_path.display(),
-                                        e
-                                    );
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        } else {
-            warn!(
-                "Packages directory not found: {}",
-                self.packages_dir.display()
-            );
-            if let Err(e) = std::fs::create_dir_all(&self.packages_dir) {
-                error!("Failed to create packages directory: {}", e);
-            }
-        }
+                                    let module_id = manifest.package.id.clone();
+                                    self.packages.insert(module_id.clone(), manifest);
 
-        // Scan blocks
-        if self.blocks_dir.exists() {
-            if let Ok(entries) = std::fs::read_dir(&self.blocks_dir) {
-                for entry in entries.flatten() {
-                    let path = entry.path();
-                    if path.is_dir() {
-                        let manifest_path = path.join("block.toml");
-                        if manifest_path.exists() {
-                            match self.load_block_manifest(&manifest_path) {
-                                Ok(manifest) => {
-                                    info!("Loaded block manifest: {}", manifest.block.id);
-                                    self.blocks.insert(manifest.block.id.clone(), manifest);
+                                    // Scan for blocks within this module
+                                    let blocks_path = path.join("blocks");
+                                    if blocks_path.exists() {
+                                        if let Ok(block_entries) = std::fs::read_dir(&blocks_path) {
+                                            for b_entry in block_entries.flatten() {
+                                                let b_path = b_entry.path();
+                                                if b_path.is_dir() {
+                                                    let b_manifest_path = b_path.join("block.toml");
+                                                    if b_manifest_path.exists() {
+                                                        match self
+                                                            .load_block_manifest(&b_manifest_path)
+                                                        {
+                                                            Ok(mut b_manifest) => {
+                                                                // Force the module_code to match the parent module
+                                                                b_manifest.block.module_code =
+                                                                    module_id.clone();
+                                                                info!(
+                                                                    "Loaded block manifest: {} (from {})",
+                                                                    b_manifest.block.id, module_id
+                                                                );
+                                                                self.blocks.insert(
+                                                                    b_manifest.block.id.clone(),
+                                                                    b_manifest,
+                                                                );
+                                                            }
+                                                            Err(e) => error!(
+                                                                "Failed to load block manifest from {}: {}",
+                                                                b_manifest_path.display(),
+                                                                e
+                                                            ),
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
-                                Err(e) => {
-                                    error!(
-                                        "Failed to load block manifest from {}: {}",
-                                        manifest_path.display(),
-                                        e
-                                    );
-                                }
+                                Err(e) => error!(
+                                    "Failed to load package manifest from {}: {}",
+                                    manifest_path.display(),
+                                    e
+                                ),
                             }
                         }
                     }
                 }
-            }
-        } else {
-            warn!("Blocks directory not found: {}", self.blocks_dir.display());
-            if let Err(e) = std::fs::create_dir_all(&self.blocks_dir) {
-                error!("Failed to create blocks directory: {}", e);
             }
         }
     }

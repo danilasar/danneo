@@ -7,6 +7,7 @@ pub mod frontend;
 pub mod models;
 pub mod module;
 pub mod registry;
+pub mod rpc;
 pub mod state;
 pub mod utils;
 
@@ -105,6 +106,7 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
             post(apanel::modules::uninstall_module),
         )
         .route("/modules/enable", post(apanel::modules::enable_module))
+        .route("/modules/disable", post(apanel::modules::disable_module))
         .route(
             "/m/:module/*path",
             get(apanel::modules::dispatch_admin).post(apanel::modules::dispatch_admin),
@@ -179,14 +181,15 @@ async fn root(State(state): State<Arc<state::AppState>>) -> impl axum::response:
     seo.insert_into_context(&mut context);
 
     // Предварительный рендеринг блоков
-    let ctx = Arc::new(crate::blocks::BlockContext {
+    let block_ctx = Arc::new(crate::blocks::BlockContext {
         db: state.db.clone(),
         settings: state.settings.clone(),
+        state: state.clone(),
     });
 
     let positions = state
         .block_registry
-        .get_all_positions_html(ctx, &state.tera)
+        .get_all_positions_html(block_ctx, &state.tera)
         .await;
     context.insert("positions", &positions);
 

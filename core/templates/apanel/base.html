@@ -55,70 +55,24 @@
             <table id="content-table">
                 <tr>
                     <td id="aside" class="menuinterface bill">
-                        <div class="menupanelin">{{ t(key='admin_content') }}</div>
-                        <div class="menu-content">
-                            <div class="panels menupanel" id="infopages">
-                                <img src="/static/apanel/images/menu/infopages.gif" alt=""> <span>{{ t(key='admin_infopages') }}</span>
-                            </div>
-                            <div class="mcont" style="display:none">
-                                <a class="interface" href="#">{{ t(key='admin_list') }}</a>
-                                <a class="interface" href="#">{{ t(key='admin_add') }}</a>
-                            </div>
-
-                            <div class="panels menupanel" id="news">
-                                <img src="/static/apanel/images/menu/news.gif" alt=""> <span>{{ t(key='admin_news') }}</span>
-                            </div>
-                            <div class="mcont" style="display:none">
-                                <a class="interface" href="#">{{ t(key='admin_list') }}</a>
-                                <a class="interface" href="#">{{ t(key='admin_add') }}</a>
-                            </div>
-
-                            {% for group in module_menus %}
-                                {% if group.id == 'content' %}
-                                    <div class="mcont" style="display:block">
-                                        {% for item in group.items %}
-                                            <a class="interface" href="{{ item.link }}">{{ item.name }}</a>
+                        {% for supercat in admin_menu %}
+                            <div class="menupanelin">{{ supercat.label }}</div>
+                            <div class="menu-{{ supercat.code }}">
+                                {% for cat in supercat.categories %}
+                                    <div class="panels menupanel" id="{{ cat.code }}">
+                                        {% if cat.icon %}
+                                            <img src="/static/apanel/images/menu/{{ cat.icon }}" alt="">
+                                        {% endif %}
+                                        <span>{{ cat.label }}</span>
+                                    </div>
+                                    <div class="mcont" style="display:none">
+                                        {% for item in cat.items %}
+                                            <a class="interface" href="{{ item.link }}">{{ item.label }}</a>
                                         {% endfor %}
                                     </div>
-                                {% endif %}
-                            {% endfor %}
-                        </div>
-
-                        {% for group in module_menus %}
-                            {% if group.id != 'content' %}
-                                <div class="menupanelin">{{ group.name }}</div>
-                                <div class="menu-{{ group.id }}">
-                                    <div class="mcont" style="display:block">
-                                        {% for item in group.items %}
-                                            <a class="interface" href="{{ item.link }}">{{ item.name }}</a>
-                                        {% endfor %}
-                                    </div>
-                                </div>
-                            {% endif %}
+                                {% endfor %}
+                            </div>
                         {% endfor %}
-
-                        <div class="menupanelin">{{ t(key='admin_system') }}</div>
-                        <div class="menu-system">
-                            <div class="panels menupanel" id="setting">
-                                <img src="/static/apanel/images/menu/setting.gif" alt=""> <span>{{ t(key='admin_settings_title') }}</span>
-                            </div>
-                            <div class="mcont" style="display:none">
-                                <a class="interface" href="/admin/settings">{{ t(key='admin_settings') }}</a>
-                                <a class="interface" href="/admin/design">{{ t(key='admin_design') }}</a>
-                                <a class="interface" href="/admin/modules">Модули и пакеты</a>
-                                <a class="interface" href="/admin/blocks">{{ t(key='admin_blocks') }}</a>
-                                <a class="interface" href="/admin/menu">{{ t(key='admin_menu') }}</a>
-                                <a class="interface" href="/admin/seo">SEO</a>
-                            </div>
-
-                            <div class="panels menupanel" id="access">
-                                <img src="/static/apanel/images/menu/user.gif" alt=""> <span>{{ t(key='admin_security') }}</span>
-                            </div>
-                            <div class="mcont" style="display:none">
-                                <a class="interface" href="/admin/amanage">{{ t(key='admin_amanage') }}</a>
-                                <a class="interface" href="/admin/agroups">{{ t(key='admin_agroups') }}</a>
-                            </div>
-                        </div>
                     </td>
                     <td class="panelinterface" id="menu-toggle">
                         <img id="menup" src="/static/apanel/images/closed.gif" alt="{{ t(key='admin_toggle_menu') }}" />
