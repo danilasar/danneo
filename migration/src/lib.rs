@@ -6,6 +6,7 @@ pub mod m20260508_000003_create_menu_tables;
 pub mod m20260508_000004_update_core_admins;
 pub mod m20260508_000005_add_admin_groups_and_levels;
 pub mod m20260508_000006_create_module_registry;
+pub mod m20260508_000007_create_system_state;
 
 pub struct Migrator;
 
@@ -19,6 +20,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20260508_000004_update_core_admins::Migration),
             Box::new(m20260508_000005_add_admin_groups_and_levels::Migration),
             Box::new(m20260508_000006_create_module_registry::Migration),
+            Box::new(m20260508_000007_create_system_state::Migration),
         ]
     }
 }

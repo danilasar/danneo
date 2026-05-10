@@ -258,6 +258,18 @@ impl ScriptEngine {
         }
         .register(&lua)?;
 
+        // system api
+        let system_table = lua.create_table()?;
+        let st_sys = state.clone();
+        system_table.set(
+            "is_available",
+            lua.create_async_function(move |_, module_code: String| {
+                let st = st_sys.clone();
+                async move { Ok(st.is_module_available(&module_code).await) }
+            })?,
+        )?;
+        lua.globals().set("system", system_table)?;
+
         // rpc bridge
         let rpc_table = lua.create_table()?;
         let rpc_reg = self.rpc_registry.clone();

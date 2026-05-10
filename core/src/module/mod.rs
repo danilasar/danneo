@@ -5,12 +5,23 @@ use serde_json::Value;
 use std::sync::Arc;
 
 pub mod admin_menu;
-pub mod native_demo;
-pub mod settings;
-pub mod seo;
-pub mod design;
 pub mod blocks;
+pub mod design;
+pub mod native_demo;
 pub mod security;
+pub mod seo;
+pub mod settings;
+
+use sea_orm::DatabaseConnection;
+
+pub type NativeModuleFactory = fn(Arc<DatabaseConnection>) -> Arc<dyn DanneoModule>;
+
+pub struct NativeModuleRegistration {
+    pub name: &'static str,
+    pub factory: NativeModuleFactory,
+}
+
+inventory::collect!(NativeModuleRegistration);
 
 #[derive(Clone, Debug)]
 pub struct NativeBlockDefinition {

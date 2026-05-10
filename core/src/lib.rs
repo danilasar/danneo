@@ -1,6 +1,8 @@
 #[macro_use]
 extern crate rust_i18n;
 
+pub use inventory;
+
 pub mod acl;
 pub mod apanel;
 pub mod auth;

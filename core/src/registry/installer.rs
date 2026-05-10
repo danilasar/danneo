@@ -1,6 +1,7 @@
 use crate::registry::{PackageRegistry, ScriptEngine};
-use sea_orm::{ActiveModelTrait, DatabaseConnection, Set, PaginatorTrait};
+use sea_orm::{ActiveModelTrait, DatabaseConnection, Set, PaginatorTrait, Statement, ConnectionTrait};
 use std::sync::Arc;
+use sea_query::{Alias, Query, Expr};
 
 use crate::state::AppState;
 
@@ -536,6 +537,30 @@ impl PackageInstaller {
     pub async fn bootstrap(&self) -> Result<(), String> {
         use crate::models::core_modules;
         use sea_orm::{EntityTrait, ColumnTrait, QueryFilter};
+        let db = self.db.as_ref();
+        let backend = db.get_database_backend();
+
+        // 0. Check if system was ALREADY bootstrapped via dedicated system table
+        let (sql, values) = Query::select()
+            .column(Alias::new("value"))
+            .from(Alias::new("core_system_state"))
+            .and_where(Expr::col(Alias::new("key")).eq("is_bootstrapped"))
+            .build_any(match backend {
+                sea_orm::DatabaseBackend::Postgres => &sea_query::PostgresQueryBuilder,
+                sea_orm::DatabaseBackend::MySql => &sea_query::MysqlQueryBuilder,
+                sea_orm::DatabaseBackend::Sqlite => &sea_query::SqliteQueryBuilder,
+            });
+
+        let bootstrapped = db.query_one(Statement::from_sql_and_values(backend, &sql, values))
+            .await.unwrap_or(None);
+        
+        if let Some(row) = bootstrapped {
+             let val: String = row.try_get("", "value").unwrap_or_default();
+             if val == "true" {
+                 tracing::info!("System already bootstrapped (flag found), skipping automation");
+                 return Ok(());
+             }
+        }
         
         tracing::info!("Checking system bootstrap status...");
 
@@ -596,7 +621,22 @@ impl PackageInstaller {
             }
         }
 
-        tracing::info!("Bootstrap check completed");
+        // 4. Set the bootstrapped flag in system table
+        let (sql, values) = Query::insert()
+            .into_table(Alias::new("core_system_state"))
+            .columns([Alias::new("key"), Alias::new("value")])
+            .values_panic(["is_bootstrapped".into(), "true".into()])
+            .build_any(match backend {
+                sea_orm::DatabaseBackend::Postgres => &sea_query::PostgresQueryBuilder,
+                sea_orm::DatabaseBackend::MySql => &sea_query::MysqlQueryBuilder,
+                sea_orm::DatabaseBackend::Sqlite => &sea_query::SqliteQueryBuilder,
+            });
+
+        if let Err(e) = db.execute(Statement::from_sql_and_values(backend, &sql, values)).await {
+            tracing::error!("Failed to set bootstrap flag: {}", e);
+        }
+
+        tracing::info!("Bootstrap completed successfully");
         Ok(())
     }
 

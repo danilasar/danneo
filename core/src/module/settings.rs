@@ -19,6 +19,13 @@ impl SettingsModule {
     }
 }
 
+crate::inventory::submit! {
+    crate::module::NativeModuleRegistration {
+        name: "settings",
+        factory: |db| Arc::new(SettingsModule::new(db)),
+    }
+}
+
 #[async_trait]
 impl DanneoModule for SettingsModule {
     fn name(&self) -> &'static str {

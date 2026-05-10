@@ -6,6 +6,13 @@ use std::sync::Arc;
 
 pub struct BlocksModule;
 
+crate::inventory::submit! {
+    crate::module::NativeModuleRegistration {
+        name: "blocks",
+        factory: |_| Arc::new(BlocksModule),
+    }
+}
+
 #[async_trait]
 impl DanneoModule for BlocksModule {
     fn name(&self) -> &'static str {

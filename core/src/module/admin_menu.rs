@@ -289,6 +289,13 @@ impl AdminMenuModule {
     }
 }
 
+crate::inventory::submit! {
+    crate::module::NativeModuleRegistration {
+        name: "admin_menu",
+        factory: |db| Arc::new(AdminMenuModule::new(db)),
+    }
+}
+
 #[async_trait]
 impl DanneoModule for AdminMenuModule {
     fn name(&self) -> &'static str {

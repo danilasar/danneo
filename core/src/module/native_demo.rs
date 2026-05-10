@@ -7,6 +7,13 @@ use std::sync::Arc;
 
 pub struct NativeDemoModule;
 
+crate::inventory::submit! {
+    crate::module::NativeModuleRegistration {
+        name: "native_demo",
+        factory: |_| Arc::new(NativeDemoModule),
+    }
+}
+
 #[async_trait]
 impl DanneoModule for NativeDemoModule {
     fn name(&self) -> &'static str {

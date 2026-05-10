@@ -32,11 +32,16 @@ pub async fn admin_acl_middleware(
 
     // 3. Определяем запрашиваемый модуль из пути
     let path = request.uri().path();
-    // Формат: /admin/module_name/...
+    // Путь уже не содержит /admin, так как мы вложены
     let parts: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
 
-    if parts.len() >= 2 && parts[0] == "admin" {
-        let module = parts[1];
+    if !parts.is_empty() {
+        let module = parts[0];
+
+        // Пропускаем системные пути, если нужно, или проверяем ACL
+        if matches!(module, "dashboard" | "modules" | "login") {
+            return Ok(next.run(request).await);
+        }
 
         // Проверяем права через Casbin
         // sub: login, obj: module, act: view (базовый доступ к модулю), level: admin.level
@@ -57,7 +62,6 @@ pub async fn admin_acl_middleware(
         return Err(StatusCode::FORBIDDEN);
     }
 
-    // Если путь не соответствует формату /admin/module, но мы в админке (например /admin/dashboard)
     Ok(next.run(request).await)
 }
 
@@ -68,13 +72,17 @@ pub async fn module_enabled_middleware(
     next: Next,
 ) -> Result<impl IntoResponse, StatusCode> {
     let path = request.uri().path();
+    tracing::info!("module_enabled_middleware check path: {}", path);
     let parts: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
 
-    if parts.len() >= 2 && parts[0] == "admin" {
-        let module_code = parts[1];
+    // Поскольку middleware применяется к admin_routes (nested under /admin), 
+    // путь здесь уже не содержит /admin.
+    // Например: /settings -> parts[0] == "settings"
+    if !parts.is_empty() {
+        let module_code = parts[0];
         
-        // Dashboard, Modules и другие системные роуты ядра пропускаем без проверки на включенность (они всегда включены)
-        if matches!(module_code, "dashboard" | "modules" | "login" | "crud") {
+        // Системные роуты ядра пропускаем без проверки на включенность
+        if matches!(module_code, "dashboard" | "modules" | "login" | "crud" | "m" | "menu_system") {
              return Ok(next.run(request).await);
         }
 

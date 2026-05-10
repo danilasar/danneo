@@ -51,24 +51,13 @@ impl AppState {
         let routes = Arc::new(tokio::sync::RwLock::new(crate::registry::RouteRegistry::new()));
         let block_registry = Arc::new(crate::registry::BlockRegistry::new(db_arc.clone(), script_engine.clone()));
 
-        // 2. Register Core Native Modules
-        let settings_module = Arc::new(crate::module::settings::SettingsModule::new(db_arc.clone()));
-        let admin_menu_module = Arc::new(crate::module::admin_menu::AdminMenuModule::new(db_arc.clone()));
-        let seo_module = Arc::new(crate::module::seo::SeoModule);
-        let design_module = Arc::new(crate::module::design::DesignModule);
-        let blocks_module = Arc::new(crate::module::blocks::BlocksModule);
-        let security_module = Arc::new(crate::module::security::SecurityModule);
-        let native_demo = Arc::new(crate::module::native_demo::NativeDemoModule);
-
+        // 2. Discover and Register Native Modules via inventory
         {
             let modules_guard = modules.write().await;
-            modules_guard.register_native(settings_module.clone()).await;
-            modules_guard.register_native(admin_menu_module.clone()).await;
-            modules_guard.register_native(seo_module.clone()).await;
-            modules_guard.register_native(design_module.clone()).await;
-            modules_guard.register_native(blocks_module.clone()).await;
-            modules_guard.register_native(security_module.clone()).await;
-            modules_guard.register_native(native_demo.clone()).await;
+            for registration in inventory::iter::<crate::module::NativeModuleRegistration> {
+                let module = (registration.factory)(db_arc.clone());
+                modules_guard.register_native(module).await;
+            }
         }
 
         // 3. System Defaults
@@ -122,7 +111,6 @@ impl AppState {
                             let name = format!("{}/{}/{}", module, theme, rest.to_string_lossy()).replace('\\', "/");
                             module_templates.push((path.clone(), name));
 
-                            // Also register "apanel/" templates with short name for inheritance if in default theme
                             if theme == "default" && rest.starts_with("apanel") {
                                 let short_name = rest.to_string_lossy().replace('\\', "/");
                                 module_templates.push((path, short_name));
@@ -133,8 +121,6 @@ impl AppState {
             }
         }
 
-        // Add all collected templates to Tera
-        // Sort templates: apanel/base.html should be first to avoid inheritance issues
         module_templates.sort_by(|a, b| {
             let a_is_base = a.1 == "apanel/base.html";
             let b_is_base = b.1 == "apanel/base.html";
@@ -169,10 +155,7 @@ impl AppState {
             rpc_registry: rpc_registry.clone(),
         });
 
-        // 7. Initial Module Inits (for RPC registration)
-        // (Native modules register their handlers here)
-
-        // 8. Automated Bootstrap (runs on_install for core modules if clean DB)
+        // 7. Automated Bootstrap
         let installer = crate::registry::PackageInstaller::new(
             db_arc.clone(),
             state.packages.clone(),
@@ -183,14 +166,14 @@ impl AppState {
         );
         let _ = installer.bootstrap().await;
 
-        // 9. Final Module Initializations (Sync state with DB)
-        settings_module.init(state.clone()).await.ok();
-        admin_menu_module.init(state.clone()).await.ok();
-        seo_module.init(state.clone()).await.ok();
-        design_module.init(state.clone()).await.ok();
-        blocks_module.init(state.clone()).await.ok();
-        security_module.init(state.clone()).await.ok();
-        native_demo.init(state.clone()).await.ok();
+        // 8. Final Module Initializations (Sync state with DB)
+        {
+            let modules_guard = state.modules.read().await;
+            let native_modules = modules_guard.native_modules.read().await;
+            for module in native_modules.values() {
+                module.init(state.clone()).await.ok();
+            }
+        }
 
         let native_modules_map = {
             let modules_guard = state.modules.read().await;
@@ -220,5 +203,18 @@ impl AppState {
             script_engine: self.script_engine.clone(),
             rpc_registry: self.rpc_registry.clone(),
         }
+    }
+
+    /// Проверка доступен ли модуль (установлен и включен)
+    pub async fn is_module_available(&self, module_code: &str) -> bool {
+        use crate::models::core_modules;
+        use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+        core_modules::Entity::find()
+            .filter(core_modules::Column::Code.eq(module_code))
+            .filter(core_modules::Column::Enabled.eq(true))
+            .one(self.db.as_ref())
+            .await
+            .unwrap_or(None)
+            .is_some()
     }
 }
