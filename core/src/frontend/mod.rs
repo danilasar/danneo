@@ -33,6 +33,12 @@ pub async fn prepare_frontend_context(state: Arc<AppState>, context: &mut Contex
     if let Ok(items) = bot_menu_res {
         context.insert("bot_menu_items", &items);
     }
+
+    // Default SEO
+    let seo = crate::utils::seo::SeoMeta::new(&settings.site_name)
+        .with_description(&settings.site_name)
+        .with_breadcrumb(&settings.site_name, "/");
+    seo.insert_into_context(context);
 }
 
 pub async fn dispatch(

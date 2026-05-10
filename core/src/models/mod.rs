@@ -3,6 +3,7 @@ pub mod core_admins;
 pub mod core_block_definitions;
 pub mod core_block_posit;
 pub mod core_blocks;
+pub mod core_images;
 pub mod core_menu_groups;
 pub mod core_menu_items;
 pub mod core_module_entities;

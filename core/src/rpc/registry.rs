@@ -87,17 +87,23 @@ impl RpcRegistry {
             return Err(RpcError::MaxDepthReached);
         }
 
+        // 1. Check if module is available and enabled
+        // Note: some system modules (like admin_menu itself) might be calling others during init.
+        // We'll allow "admin_menu" and "settings" to always be callable to avoid chicken-and-egg issues during bootstrap.
+        if !matches!(target_module, "admin_menu" | "settings") && !state.is_module_available(target_module).await {
+            return Err(RpcError::NotFound(format!("Module {} is disabled or not found", target_module)));
+        }
+
         let handler = {
             let methods = self.methods.read().await;
             methods.get(target_module).cloned()
         };
 
         if let Some(h) = handler {
-            // TODO: ACL and visibility check
             h.call(method, payload, ctx, state).await
         } else {
             Err(RpcError::NotFound(format!(
-                "Module {} not found",
+                "Module {} handler not registered",
                 target_module
             )))
         }

@@ -85,7 +85,7 @@ pub async fn save_admin(
         email: Set(Some(form.email)),
         group_id: Set(form.group_id),
         level: Set(form.level),
-        permissions: Set(serde_json::json!([])), // Теперь пусто, всё в Casbin
+        permissions: Set(Some(serde_json::json!([]))), // Теперь пусто, всё в Casbin
         ..Default::default()
     };
 

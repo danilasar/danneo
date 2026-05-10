@@ -10,7 +10,7 @@ pub struct Model {
     pub login: String,
     pub password_hash: String,
     pub email: Option<String>,
-    pub permissions: Json,
+    pub permissions: Option<Json>,
     pub group_id: Option<i32>,
     pub level: i32,
 }

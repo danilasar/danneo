@@ -18,47 +18,34 @@ pub async fn admin_acl_middleware(
 ) -> Result<impl IntoResponse, StatusCode> {
     let db = state.db.as_ref();
 
-    // 1. СуперАдмин (ID=1) безусловно имеет доступ ко всему (MAC уровень 100)
     if claims.admin_id == 1 {
         return Ok(next.run(request).await);
     }
 
-    // 2. Получаем админа из базы для получения логина и уровня доступа
     let admin = core_admins::Entity::find_by_id(claims.admin_id)
         .one(db)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .ok_or(StatusCode::UNAUTHORIZED)?;
 
-    // 3. Определяем запрашиваемый модуль из пути
     let path = request.uri().path();
-    // Путь уже не содержит /admin, так как мы вложены
-    let parts: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
+    let module_code = get_module_from_path(&state, path).await;
 
-    if !parts.is_empty() {
-        let module = parts[0];
-
-        // Пропускаем системные пути, если нужно, или проверяем ACL
-        if matches!(module, "dashboard" | "modules" | "login") {
+    if let Some(module) = module_code {
+        if matches!(module.as_str(), "dashboard" | "modules" | "login") {
             return Ok(next.run(request).await);
         }
 
-        // Проверяем права через Casbin
-        // sub: login, obj: module, act: view (базовый доступ к модулю), level: admin.level
         let has_access = state
             .acl
-            .enforce(&admin.login, module, "view", admin.level)
+            .enforce(&admin.login, &module, "view", admin.level)
             .await;
 
         if has_access {
             return Ok(next.run(request).await);
         }
 
-        tracing::warn!(
-            "Access denied for admin {} to module {}",
-            admin.login,
-            module
-        );
+        tracing::warn!("Access denied for admin {} to module {}", admin.login, module);
         return Err(StatusCode::FORBIDDEN);
     }
 
@@ -72,24 +59,17 @@ pub async fn module_enabled_middleware(
     next: Next,
 ) -> Result<impl IntoResponse, StatusCode> {
     let path = request.uri().path();
-    tracing::info!("module_enabled_middleware check path: {}", path);
-    let parts: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
+    let module_code = get_module_from_path(&state, path).await;
 
-    // Поскольку middleware применяется к admin_routes (nested under /admin), 
-    // путь здесь уже не содержит /admin.
-    // Например: /settings -> parts[0] == "settings"
-    if !parts.is_empty() {
-        let module_code = parts[0];
-        
-        // Системные роуты ядра пропускаем без проверки на включенность
-        if matches!(module_code, "dashboard" | "modules" | "login" | "crud" | "m" | "menu_system") {
+    if let Some(module) = module_code {
+        if matches!(module.as_str(), "dashboard" | "modules" | "login" | "crud" | "menu_system") {
              return Ok(next.run(request).await);
         }
 
         use crate::models::core_modules;
         use sea_orm::{ColumnTrait, QueryFilter};
         let is_enabled = core_modules::Entity::find()
-            .filter(core_modules::Column::Code.eq(module_code))
+            .filter(core_modules::Column::Code.eq(module))
             .filter(core_modules::Column::Enabled.eq(true))
             .one(state.db.as_ref())
             .await
@@ -97,10 +77,50 @@ pub async fn module_enabled_middleware(
             .is_some();
 
         if !is_enabled {
-            tracing::warn!("Request to disabled module: {}", module_code);
             return Err(StatusCode::NOT_FOUND);
         }
     }
 
     Ok(next.run(request).await)
+}
+
+async fn get_module_from_path(state: &AppState, path: &str) -> Option<String> {
+    // 1. Remove /admin prefix if present
+    let clean_path = if path.starts_with("/admin") {
+        &path[6..]
+    } else {
+        path
+    };
+    
+    let parts: Vec<&str> = clean_path.split('/').filter(|s| !s.is_empty()).collect();
+    if parts.is_empty() { 
+        tracing::debug!("get_module_from_path: empty path parts for {}", path);
+        return None; 
+    }
+
+    // 2. Check technical routes /admin/m/:module/...
+    if parts[0] == "m" && parts.len() >= 2 {
+        let m = parts[1].to_string();
+        tracing::debug!("get_module_from_path: technical route for module {}", m);
+        return Some(m);
+    }
+
+    // 3. Check for match in RouteRegistry
+    {
+        let routes = state.routes.read().await;
+        // Normalize clean_path to always start with /
+        let normalized_path = if clean_path.starts_with('/') { clean_path.to_string() } else { format!("/{}", clean_path) };
+        
+        for (module_code, descriptor) in &routes.admin_routes {
+            if descriptor.path == normalized_path || descriptor.path == clean_path {
+                tracing::debug!("get_module_from_path: matched route {} to module {}", normalized_path, module_code);
+                return Some(module_code.clone());
+            }
+        }
+    }
+
+    // 4. Default: first segment is module ID (for native modules or simple paths)
+    let m = parts[0].to_string();
+    tracing::debug!("get_module_from_path: default to first segment {} for path {}", m, path);
+    Some(m)
 }

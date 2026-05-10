@@ -2,7 +2,7 @@ use crate::models::core_modules;
 use crate::module::DanneoModule;
 use crate::state::AppState;
 use axum::{
-    extract::{Form, Multipart, Path, State, Request},
+    extract::{Form, Multipart, Path, State, Request, FromRequest},
     http::{StatusCode, Method, Uri},
     response::{IntoResponse, Redirect, Response, Html},
 };
@@ -247,9 +247,7 @@ pub async fn uninstall_module(
         state.clone(),
     );
     if let Err(e) = installer.uninstall(&form.package_id).await {
-         if let Err(e2) = installer.uninstall_kernel_module(&form.package_id).await {
-             tracing::error!("Uninstall error: {} / {}", e, e2);
-         }
+        tracing::error!("Uninstall error: {}", e);
     }
     Redirect::to("/admin/modules")
 }
@@ -404,10 +402,50 @@ async fn dispatch_admin_internal(
         .unwrap_or_default();
 
     let mut form_val = serde_json::json!({});
+    let mut files_val = serde_json::json!([]);
+
     if method == Method::POST {
-        let body_bytes = axum::body::to_bytes(req.into_body(), 1024 * 1024).await.unwrap_or_default();
-        if let Ok(form) = serde_urlencoded::from_bytes::<serde_json::Value>(&body_bytes) {
-             form_val = form;
+        let content_type = req.headers()
+            .get(axum::http::header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or_default();
+
+        if content_type.starts_with("multipart/form-data") {
+            if let Ok(mut multipart) = Multipart::from_request(req, &state).await {
+                let mut form_map = serde_json::Map::new();
+                let mut files_vec = Vec::new();
+                
+                while let Ok(Some(field)) = multipart.next_field().await {
+                    let name = field.name().unwrap_or_default().to_string();
+                    let file_name = field.file_name().map(|s| s.to_string());
+                    
+                    if let Some(f_name) = file_name {
+                        if let Ok(data) = field.bytes().await {
+                            let temp_dir = std::env::temp_dir();
+                            let temp_path = temp_dir.join(format!("neodanneo_{}_{}", uuid::Uuid::new_v4(), f_name));
+                            if let Ok(_) = std::fs::write(&temp_path, &data) {
+                                files_vec.push(serde_json::json!({
+                                    "field": name,
+                                    "name": f_name,
+                                    "size": data.len(),
+                                    "temp_path": temp_path.to_string_lossy()
+                                }));
+                            }
+                        }
+                    } else {
+                        if let Ok(text) = field.text().await {
+                            form_map.insert(name, serde_json::Value::String(text));
+                        }
+                    }
+                }
+                form_val = serde_json::Value::Object(form_map);
+                files_val = serde_json::Value::Array(files_vec);
+            }
+        } else {
+            let body_bytes = axum::body::to_bytes(req.into_body(), 1024 * 1024).await.unwrap_or_default();
+            if let Ok(form) = serde_urlencoded::from_bytes::<serde_json::Value>(&body_bytes) {
+                 form_val = form;
+            }
         }
     }
 
@@ -416,6 +454,7 @@ async fn dispatch_admin_internal(
         "method": method.as_str(),
         "query": query,
         "form": form_val,
+        "files": files_val,
     });
 
     let dynamic_arg = script_rhai::serde::to_dynamic(arg).unwrap();
@@ -427,7 +466,6 @@ async fn dispatch_admin_internal(
     {
         Ok(res) => {
             if let Some(res_map) = res.clone().try_cast::<script_rhai::Map>() {
-                // 1. Check for Redirect
                 if let Some(redirect) = res_map.get("redirect").and_then(|v| v.clone().into_string().ok()) {
                     return Redirect::to(&redirect).into_response();
                 }
@@ -461,13 +499,42 @@ async fn dispatch_admin_internal(
                     crate::apanel::resolve_module_template(&state, &module_name, &template).await
                 };
 
-                match state.tera.render(&full_template, &ctx) {
+                let mut response = match state.tera.render(&full_template, &ctx) {
                     Ok(html) => Html(html).into_response(),
                     Err(e) => {
                         tracing::error!("Template rendering error in dispatch_admin: {}", e);
                         Html(format!("<h1>Template Error</h1><pre>{}</pre>", e)).into_response()
                     }
+                };
+
+                // Apply custom status if present
+                if let Some(status_dyn) = res_map.get("status") {
+                    if let Ok(status_code) = status_dyn.clone().as_int() {
+                        if let Ok(st) = StatusCode::from_u16(status_code as u16) {
+                            *response.status_mut() = st;
+                        }
+                    }
                 }
+
+                // Apply custom headers if present
+                if let Some(headers_dyn) = res_map.get("headers") {
+                    if let Ok(headers_val) = script_rhai::serde::from_dynamic::<serde_json::Value>(headers_dyn) {
+                        if let Some(obj) = headers_val.as_object() {
+                            let headers = response.headers_mut();
+                            for (k, v) in obj {
+                                if let Some(v_str) = v.as_str() {
+                                    if let Ok(h_name) = axum::http::header::HeaderName::from_bytes(k.as_bytes()) {
+                                        if let Ok(h_val) = axum::http::HeaderValue::from_str(v_str) {
+                                            headers.insert(h_name, h_val);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                response
             } else if let Some(s) = res.try_cast::<String>() {
                 Html(s).into_response()
             } else {

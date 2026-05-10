@@ -13,6 +13,20 @@ services:
     volumes:
       - pg_data_2:/var/lib/postgresql/data
 
+  minio:
+    image: minio/minio
+    container_name: neodanneo_storage
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+
 volumes:
   pg_data:
   pg_data_2:
+  minio_data:

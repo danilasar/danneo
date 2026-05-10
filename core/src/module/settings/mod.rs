@@ -2,7 +2,7 @@ use crate::module::DanneoModule;
 use crate::state::AppState;
 use crate::rpc::{RpcContext, RpcError, RpcVisibility, RpcMethodDescriptor};
 use async_trait::async_trait;
-use axum::{Router, routing::{get, post}, extract::State};
+use axum::{Router, routing::{get, post}};
 use sea_orm::{ConnectionTrait, DatabaseConnection, Statement};
 use sea_query::{Alias, Query};
 use std::sync::Arc;
@@ -19,13 +19,6 @@ impl SettingsModule {
     }
 }
 
-crate::inventory::submit! {
-    crate::module::NativeModuleRegistration {
-        name: "settings",
-        factory: |db| Arc::new(SettingsModule::new(db)),
-    }
-}
-
 #[async_trait]
 impl DanneoModule for SettingsModule {
     fn name(&self) -> &'static str {
@@ -37,14 +30,14 @@ impl DanneoModule for SettingsModule {
         let backend = db.get_database_backend();
         use sea_orm_migration::prelude::SchemaManager;
         let manager = SchemaManager::new(db);
-        use sea_query::{Alias, ColumnDef, Table, Query};
+        use sea_query::{ColumnDef, Table};
         
         // 1. Создание таблицы настроек (если нет)
         manager.create_table(Table::create()
             .table(Alias::new("core_settings"))
             .if_not_exists()
             .col(ColumnDef::new(Alias::new("key")).string().not_null().primary_key())
-            .col(ColumnDef::new(Alias::new("value")).json_binary().not_null()) // Use json_binary for JSONB on Postgres
+            .col(ColumnDef::new(Alias::new("value")).json_binary().not_null())
             .to_owned()).await.map_err(|e| e.to_string())?;
 
         // 2. Дефолтные настройки
@@ -53,6 +46,12 @@ impl DanneoModule for SettingsModule {
             ("admin_email", "\"admin@example.com\""),
             ("site_url", "\"http://localhost:3000\""),
             ("site_temp", "\"Soft\""),
+            // Storage defaults
+            ("storage_endpoint", "\"http://localhost:9000\""),
+            ("storage_access_key", "\"minioadmin\""),
+            ("storage_secret_key", "\"minioadmin\""),
+            ("storage_bucket", "\"neodanneo\""),
+            ("storage_region", "\"us-east-1\""),
         ];
 
         for (key, val) in defaults {
@@ -104,6 +103,11 @@ impl DanneoModule for SettingsModule {
                     "admin_email" => guard.admin_email = val_str,
                     "site_url" => guard.site_url = val_str,
                     "site_temp" => guard.site_temp = val_str,
+                    "storage_endpoint" => guard.storage_endpoint = val_str,
+                    "storage_access_key" => guard.storage_access_key = val_str,
+                    "storage_secret_key" => guard.storage_secret_key = val_str,
+                    "storage_bucket" => guard.storage_bucket = val_str,
+                    "storage_region" => guard.storage_region = val_str,
                     _ => {}
                 }
             }
@@ -195,6 +199,7 @@ impl DanneoModule for SettingsModule {
                     "site_url" => Ok(json!(settings.site_url)),
                     "site_temp" => Ok(json!(settings.site_temp)),
                     "admin_email" => Ok(json!(settings.admin_email)),
+                    "storage_endpoint" => Ok(json!(settings.storage_endpoint)),
                     _ => Err(RpcError::NotFound(key.to_string())),
                 }
             }
@@ -226,3 +231,5 @@ impl DanneoModule for SettingsModule {
         }
     }
 }
+
+crate::register_native_module!("settings", |db| Arc::new(SettingsModule::new(db)));

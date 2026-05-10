@@ -14,358 +14,68 @@ impl MigrationTrait for Migration {
         manager
             .create_table(
                 Table::create()
-                    .table(CorePackages::Table)
+                    .table(Alias::new("core_modules"))
                     .if_not_exists()
                     .col(
-                        ColumnDef::new(CorePackages::Id)
-                            .integer()
-                            .not_null()
-                            .auto_increment()
-                            .primary_key(),
-                    )
-                    .col(ColumnDef::new(CorePackages::PackageId).string().not_null())
-                    .col(
-                        ColumnDef::new(CorePackages::PackageType)
-                            .string()
-                            .not_null(),
-                    )
-                    .col(
-                        ColumnDef::new(CorePackages::RuntimeType)
-                            .string()
-                            .not_null(),
-                    )
-                    .col(ColumnDef::new(CorePackages::Version).string().not_null())
-                    .col(ColumnDef::new(CorePackages::Path).string().not_null())
-                    .col(ColumnDef::new(CorePackages::Hash).string().not_null())
-                    .col(ColumnDef::new(CorePackages::Signature).string())
-                    .col(ColumnDef::new(CorePackages::Status).string().not_null())
-                    .col(
-                        ColumnDef::new(CorePackages::Manifest)
-                            .json_binary()
-                            .not_null(),
-                    )
-                    .col(
-                        ColumnDef::new(CorePackages::UploadedAt)
-                            .timestamp_with_time_zone()
-                            .not_null(),
-                    )
-                    .col(ColumnDef::new(CorePackages::InstalledAt).timestamp_with_time_zone())
-                    .to_owned(),
-            )
-            .await?;
-
-        manager
-            .create_table(
-                Table::create()
-                    .table(CoreModules::Table)
-                    .if_not_exists()
-                    .col(
-                        ColumnDef::new(CoreModules::Id)
+                        ColumnDef::new(Alias::new("id"))
                             .integer()
                             .not_null()
                             .auto_increment()
                             .primary_key(),
                     )
                     .col(
-                        ColumnDef::new(CoreModules::Code)
+                        ColumnDef::new(Alias::new("code"))
                             .string()
                             .not_null()
                             .unique_key(),
                     )
-                    .col(ColumnDef::new(CoreModules::Name).string().not_null())
-                    .col(ColumnDef::new(CoreModules::Version).string().not_null())
-                    .col(ColumnDef::new(CoreModules::PackageId).integer().not_null())
-                    .col(ColumnDef::new(CoreModules::PackagePath).string().not_null())
-                    .col(ColumnDef::new(CoreModules::PackageHash).string().not_null())
-                    .col(ColumnDef::new(CoreModules::PackageSignature).string())
-                    .col(ColumnDef::new(CoreModules::RuntimeType).string().not_null())
+                    .col(ColumnDef::new(Alias::new("name")).string().not_null())
+                    .col(ColumnDef::new(Alias::new("version")).string().not_null())
+                    .col(ColumnDef::new(Alias::new("package_id")).integer().not_null())
+                    .col(ColumnDef::new(Alias::new("package_path")).string().not_null())
+                    .col(ColumnDef::new(Alias::new("package_hash")).string().not_null())
+                    .col(ColumnDef::new(Alias::new("package_signature")).string())
+                    .col(ColumnDef::new(Alias::new("runtime_type")).string().not_null())
                     .col(
-                        ColumnDef::new(CoreModules::Enabled)
+                        ColumnDef::new(Alias::new("enabled"))
                             .boolean()
                             .not_null()
                             .default(false),
                     )
                     .col(
-                        ColumnDef::new(CoreModules::Installed)
-                            .boolean()
-                            .not_null()
-                            .default(false),
-                    )
-                    .col(
-                        ColumnDef::new(CoreModules::Position)
-                            .integer()
-                            .not_null()
-                            .default(0),
-                    )
-                    .col(
-                        ColumnDef::new(CoreModules::AdminEnabled)
-                            .boolean()
-                            .not_null()
-                            .default(false),
-                    )
-                    .col(
-                        ColumnDef::new(CoreModules::SitemapEnabled)
-                            .boolean()
-                            .not_null()
-                            .default(false),
-                    )
-                    .col(ColumnDef::new(CoreModules::Theme).string())
-                    .col(
-                        ColumnDef::new(CoreModules::Manifest)
-                            .json_binary()
-                            .not_null(),
-                    )
-                    .col(ColumnDef::new(CoreModules::Settings).json_binary())
-                    .col(ColumnDef::new(CoreModules::Capabilities).json_binary())
-                    .col(
-                        ColumnDef::new(CoreModules::InstalledAt)
-                            .timestamp_with_time_zone()
-                            .not_null(),
-                    )
-                    .col(
-                        ColumnDef::new(CoreModules::UpdatedAt)
-                            .timestamp_with_time_zone()
-                            .not_null(),
-                    )
-                    .to_owned(),
-            )
-            .await?;
-
-        manager
-            .create_table(
-                Table::create()
-                    .table(CoreModuleMigrations::Table)
-                    .if_not_exists()
-                    .col(
-                        ColumnDef::new(CoreModuleMigrations::ModuleCode)
-                            .string()
-                            .not_null(),
-                    )
-                    .col(
-                        ColumnDef::new(CoreModuleMigrations::MigrationName)
-                            .string()
-                            .not_null(),
-                    )
-                    .col(
-                        ColumnDef::new(CoreModuleMigrations::Checksum)
-                            .string()
-                            .not_null(),
-                    )
-                    .col(
-                        ColumnDef::new(CoreModuleMigrations::AppliedAt)
-                            .timestamp_with_time_zone()
-                            .not_null(),
-                    )
-                    .primary_key(
-                        Index::create()
-                            .col(CoreModuleMigrations::ModuleCode)
-                            .col(CoreModuleMigrations::MigrationName),
-                    )
-                    .to_owned(),
-            )
-            .await?;
-
-        manager
-            .create_table(
-                Table::create()
-                    .table(CoreModuleRoutes::Table)
-                    .if_not_exists()
-                    .col(
-                        ColumnDef::new(CoreModuleRoutes::Id)
-                            .integer()
-                            .not_null()
-                            .auto_increment()
-                            .primary_key(),
-                    )
-                    .col(
-                        ColumnDef::new(CoreModuleRoutes::ModuleCode)
-                            .string()
-                            .not_null(),
-                    )
-                    .col(
-                        ColumnDef::new(CoreModuleRoutes::RouteName)
-                            .string()
-                            .not_null(),
-                    )
-                    .col(ColumnDef::new(CoreModuleRoutes::Method).string().not_null())
-                    .col(ColumnDef::new(CoreModuleRoutes::Path).string().not_null())
-                    .col(
-                        ColumnDef::new(CoreModuleRoutes::Handler)
-                            .string()
-                            .not_null(),
-                    )
-                    .col(ColumnDef::new(CoreModuleRoutes::Permission).string())
-                    .col(
-                        ColumnDef::new(CoreModuleRoutes::Descriptor)
-                            .json_binary()
-                            .not_null(),
-                    )
-                    .to_owned(),
-            )
-            .await?;
-
-        manager
-            .create_table(
-                Table::create()
-                    .table(CoreModuleEntities::Table)
-                    .if_not_exists()
-                    .col(
-                        ColumnDef::new(CoreModuleEntities::Id)
-                            .integer()
-                            .not_null()
-                            .auto_increment()
-                            .primary_key(),
-                    )
-                    .col(
-                        ColumnDef::new(CoreModuleEntities::ModuleCode)
-                            .string()
-                            .not_null(),
-                    )
-                    .col(
-                        ColumnDef::new(CoreModuleEntities::EntityName)
-                            .string()
-                            .not_null(),
-                    )
-                    .col(
-                        ColumnDef::new(CoreModuleEntities::TableName)
-                            .string()
-                            .not_null(),
-                    )
-                    .col(
-                        ColumnDef::new(CoreModuleEntities::Schema)
-                            .json_binary()
-                            .not_null(),
-                    )
-                    .to_owned(),
-            )
-            .await?;
-
-        manager
-            .create_table(
-                Table::create()
-                    .table(CoreModuleSettings::Table)
-                    .if_not_exists()
-                    .col(
-                        ColumnDef::new(CoreModuleSettings::ModuleCode)
-                            .string()
-                            .not_null(),
-                    )
-                    .col(ColumnDef::new(CoreModuleSettings::Key).string().not_null())
-                    .col(
-                        ColumnDef::new(CoreModuleSettings::Value)
-                            .json_binary()
-                            .not_null(),
-                    )
-                    .col(
-                        ColumnDef::new(CoreModuleSettings::UpdatedAt)
-                            .timestamp_with_time_zone()
-                            .not_null(),
-                    )
-                    .primary_key(
-                        Index::create()
-                            .col(CoreModuleSettings::ModuleCode)
-                            .col(CoreModuleSettings::Key),
-                    )
-                    .to_owned(),
-            )
-            .await?;
-
-        manager
-            .create_table(
-                Table::create()
-                    .table(CoreBlockDefinitions::Table)
-                    .if_not_exists()
-                    .col(
-                        ColumnDef::new(CoreBlockDefinitions::Id)
-                            .integer()
-                            .not_null()
-                            .auto_increment()
-                            .primary_key(),
-                    )
-                    .col(
-                        ColumnDef::new(CoreBlockDefinitions::BlockCode)
-                            .string()
-                            .not_null()
-                            .unique_key(),
-                    )
-                    .col(ColumnDef::new(CoreBlockDefinitions::ModuleCode).string())
-                    .col(
-                        ColumnDef::new(CoreBlockDefinitions::PackageId)
-                            .integer()
-                            .not_null(),
-                    )
-                    .col(
-                        ColumnDef::new(CoreBlockDefinitions::Version)
-                            .string()
-                            .not_null(),
-                    )
-                    .col(
-                        ColumnDef::new(CoreBlockDefinitions::Enabled)
+                        ColumnDef::new(Alias::new("installed"))
                             .boolean()
                             .not_null()
                             .default(true),
                     )
                     .col(
-                        ColumnDef::new(CoreBlockDefinitions::Manifest)
-                            .json_binary()
-                            .not_null(),
-                    )
-                    .col(ColumnDef::new(CoreBlockDefinitions::SettingsSchema).json_binary())
-                    .col(ColumnDef::new(CoreBlockDefinitions::TemplatePath).string())
-                    .col(
-                        ColumnDef::new(CoreBlockDefinitions::RendererType)
-                            .string()
-                            .not_null(),
-                    )
-                    .to_owned(),
-            )
-            .await?;
-
-        manager
-            .create_table(
-                Table::create()
-                    .table(CoreBlockTargets::Table)
-                    .if_not_exists()
-                    .col(
-                        ColumnDef::new(CoreBlockTargets::Id)
+                        ColumnDef::new(Alias::new("position"))
                             .integer()
                             .not_null()
-                            .auto_increment()
-                            .primary_key(),
+                            .default(0),
                     )
                     .col(
-                        ColumnDef::new(CoreBlockTargets::BlockInstanceId)
-                            .integer()
-                            .not_null(),
-                    )
-                    .col(ColumnDef::new(CoreBlockTargets::ModuleCode).string())
-                    .col(ColumnDef::new(CoreBlockTargets::RouteName).string())
-                    .col(ColumnDef::new(CoreBlockTargets::PageKey).string())
-                    .col(ColumnDef::new(CoreBlockTargets::Mode).string().not_null())
-                    .to_owned(),
-            )
-            .await?;
-
-        manager
-            .create_table(
-                Table::create()
-                    .table(CoreBlockAccessGroups::Table)
-                    .if_not_exists()
-                    .col(
-                        ColumnDef::new(CoreBlockAccessGroups::BlockInstanceId)
-                            .integer()
-                            .not_null(),
+                        ColumnDef::new(Alias::new("admin_enabled"))
+                            .boolean()
+                            .not_null()
+                            .default(false),
                     )
                     .col(
-                        ColumnDef::new(CoreBlockAccessGroups::GroupId)
-                            .string()
+                        ColumnDef::new(Alias::new("sitemap_enabled"))
+                            .boolean()
+                            .not_null()
+                            .default(false),
+                    )
+                    .col(ColumnDef::new(Alias::new("theme")).string())
+                    .col(ColumnDef::new(Alias::new("manifest")).json_binary().not_null())
+                    .col(ColumnDef::new(Alias::new("settings")).json_binary())
+                    .col(ColumnDef::new(Alias::new("capabilities")).json_binary())
+                    .col(
+                        ColumnDef::new(Alias::new("installed_at"))
+                            .date_time()
                             .not_null(),
                     )
-                    .primary_key(
-                        Index::create()
-                            .col(CoreBlockAccessGroups::BlockInstanceId)
-                            .col(CoreBlockAccessGroups::GroupId),
-                    )
+                    .col(ColumnDef::new(Alias::new("updated_at")).date_time().not_null())
                     .to_owned(),
             )
             .await?;
@@ -375,148 +85,9 @@ impl MigrationTrait for Migration {
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
         manager
-            .drop_table(Table::drop().table(CoreBlockAccessGroups::Table).to_owned())
+            .drop_table(Table::drop().table(Alias::new("core_modules")).to_owned())
             .await?;
-        manager
-            .drop_table(Table::drop().table(CoreBlockTargets::Table).to_owned())
-            .await?;
-        manager
-            .drop_table(Table::drop().table(CoreBlockDefinitions::Table).to_owned())
-            .await?;
-        manager
-            .drop_table(Table::drop().table(CoreModuleSettings::Table).to_owned())
-            .await?;
-        manager
-            .drop_table(Table::drop().table(CoreModuleEntities::Table).to_owned())
-            .await?;
-        manager
-            .drop_table(Table::drop().table(CoreModuleRoutes::Table).to_owned())
-            .await?;
-        manager
-            .drop_table(Table::drop().table(CoreModuleMigrations::Table).to_owned())
-            .await?;
-        manager
-            .drop_table(Table::drop().table(CoreModules::Table).to_owned())
-            .await?;
-        manager
-            .drop_table(Table::drop().table(CorePackages::Table).to_owned())
-            .await?;
+
         Ok(())
     }
-}
-
-#[derive(DeriveIden)]
-enum CorePackages {
-    Table,
-    Id,
-    PackageId,
-    PackageType,
-    RuntimeType,
-    Version,
-    Path,
-    Hash,
-    Signature,
-    Status,
-    Manifest,
-    UploadedAt,
-    InstalledAt,
-}
-
-#[derive(DeriveIden)]
-enum CoreModules {
-    Table,
-    Id,
-    Code,
-    Name,
-    Version,
-    PackageId,
-    PackagePath,
-    PackageHash,
-    PackageSignature,
-    RuntimeType,
-    Enabled,
-    Installed,
-    Position,
-    AdminEnabled,
-    SitemapEnabled,
-    Theme,
-    Manifest,
-    Settings,
-    Capabilities,
-    InstalledAt,
-    UpdatedAt,
-}
-
-#[derive(DeriveIden)]
-enum CoreModuleMigrations {
-    Table,
-    ModuleCode,
-    MigrationName,
-    Checksum,
-    AppliedAt,
-}
-
-#[derive(DeriveIden)]
-enum CoreModuleRoutes {
-    Table,
-    Id,
-    ModuleCode,
-    RouteName,
-    Method,
-    Path,
-    Handler,
-    Permission,
-    Descriptor,
-}
-
-#[derive(DeriveIden)]
-enum CoreModuleEntities {
-    Table,
-    Id,
-    ModuleCode,
-    EntityName,
-    TableName,
-    Schema,
-}
-
-#[derive(DeriveIden)]
-enum CoreModuleSettings {
-    Table,
-    ModuleCode,
-    Key,
-    Value,
-    UpdatedAt,
-}
-
-#[derive(DeriveIden)]
-enum CoreBlockDefinitions {
-    Table,
-    Id,
-    BlockCode,
-    ModuleCode,
-    PackageId,
-    Version,
-    Enabled,
-    Manifest,
-    SettingsSchema,
-    TemplatePath,
-    RendererType,
-}
-
-#[derive(DeriveIden)]
-enum CoreBlockTargets {
-    Table,
-    Id,
-    BlockInstanceId,
-    ModuleCode,
-    RouteName,
-    PageKey,
-    Mode,
-}
-
-#[derive(DeriveIden)]
-enum CoreBlockAccessGroups {
-    Table,
-    BlockInstanceId,
-    GroupId,
 }

@@ -78,13 +78,13 @@ async fn test_module_db_api_isolation() {
     use sea_orm::ConnectionTrait;
     let backend = db_arc.get_database_backend();
     let stmt1 =
-        sea_orm::Statement::from_string(backend, "SELECT val FROM mod_mod1_items WHERE id=1");
+        sea_orm::Statement::from_string(backend, "SELECT val FROM mod1_items WHERE id=1");
     let row1 = db_arc.query_one(stmt1).await.unwrap().unwrap();
     let v1: String = row1.try_get("", "val").unwrap();
     assert_eq!(v1, "from mod1");
 
     let stmt2 =
-        sea_orm::Statement::from_string(backend, "SELECT val FROM mod_mod2_items WHERE id=1");
+        sea_orm::Statement::from_string(backend, "SELECT val FROM mod2_items WHERE id=1");
     let row2 = db_arc.query_one(stmt2).await.unwrap().unwrap();
     let v2: String = row2.try_get("", "val").unwrap();
     assert_eq!(v2, "from mod2");

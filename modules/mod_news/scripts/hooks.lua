@@ -1,32 +1,6 @@
--- Migration: Create tables
+-- Migration: Handled by migrations/ folder automatically
 function on_install(arg)
     print("Installing News module...")
-
-    db.create_table({
-        table_name = "categories",
-        fields = {
-            { name = "id", field_type = "integer", primary_key = true, auto_increment = true },
-            { name = "title", field_type = "string", nullable = false },
-        },
-    })
-
-    db.create_table({
-        table_name = "news",
-        fields = {
-            { name = "id", field_type = "integer", primary_key = true, auto_increment = true },
-            { name = "cat_id", field_type = "integer", nullable = false },
-            { name = "title", field_type = "string", nullable = false },
-            { name = "content", field_type = "text", nullable = false },
-            { name = "created_at", field_type = "datetime", default = "CURRENT_TIMESTAMP" },
-        },
-    })
-
-    db.insert("categories", { title = "Общие" })
-    db.insert("news", {
-        cat_id = 1,
-        title = "Добро пожаловать в Danneo 2!",
-        content = "Это первая новость, созданная через расширенный модуль новостей на скриптах.",
-    })
 
     -- Register in Admin Menu via RPC
     rpc.call("admin_menu", "ensure_category", {
@@ -60,9 +34,8 @@ end
 
 function on_uninstall(arg)
     print("Uninstalling News module...")
-    db.drop_table("news")
-    db.drop_table("categories")
-
+    -- Table dropping handled by migrations/ rollback automatically
+    
     -- Clean up Admin Menu via RPC
     rpc.call("admin_menu", "unregister_module", {
         module = "mod_news",
@@ -142,10 +115,11 @@ function render_block(arg)
     local settings = arg.settings or {}
 
     if block_code == "b-News" then
-        local limit = settings.limit or 5
         local news = db.select("news", { "id", "title", "created_at" })
         -- Simple sort and limit (in a real system this would be in SQL)
         table.sort(news, function(a, b) return a.created_at > b.created_at end)
+        
+        local limit = tonumber(settings.limit or 5)
         local recent = {}
         for i = 1, math.min(#news, limit) do
             table.insert(recent, news[i])

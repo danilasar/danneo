@@ -212,10 +212,12 @@ impl BlockRegistry {
                     let modules_guard = ctx.state.modules.read().await;
                     let native_modules = modules_guard.native_modules.read().await;
                     if let Some(module) = native_modules.get(module_code) {
+                        let settings = ctx.state.settings.clone();
                         if let Some(html) = module
-                            .render_block(block_code, ctx.clone(), settings.clone())
+                            .render_block(block_code, ctx.clone(), settings)
                             .await
                         {
+
                             return Some(html);
                         }
                     }

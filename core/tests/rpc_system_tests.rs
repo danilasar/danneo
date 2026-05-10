@@ -4,6 +4,7 @@ use danneo_core::rpc::{RpcContext, RpcError, RpcMethodDescriptor, RpcVisibility}
 use danneo_core::state::AppState;
 use serde_json::json;
 use std::sync::Arc;
+use sea_orm::{ActiveModelTrait, Set};
 
 mod common;
 
@@ -26,18 +27,35 @@ impl RpcHandler for MockNativeHandler {
                     .unwrap_or("World");
                 Ok(json!({ "message": format!("Hello, {}!", name) }))
             }
-            "recursive" => {
-                // This will be handled by the registry test
-                Ok(json!({ "status": "ok" }))
-            }
             _ => Err(RpcError::NotFound(method.to_string())),
         }
     }
 }
 
+async fn register_test_module(state: &AppState, code: &str) {
+    let now: chrono::DateTime<chrono::FixedOffset> = chrono::Utc::now().into();
+    danneo_core::models::core_modules::ActiveModel {
+        code: Set(code.to_string()),
+        name: Set(code.to_string()),
+        version: Set("1.0.0".to_string()),
+        enabled: Set(true),
+        installed: Set(true),
+        package_id: Set(0),
+        package_path: Set("test".to_string()),
+        package_hash: Set("test".to_string()),
+        runtime_type: Set("native".to_string()),
+        manifest: Set(json!({})),
+        installed_at: Set(now),
+        updated_at: Set(now),
+        ..Default::default()
+    }.insert(state.db.as_ref()).await.unwrap();
+}
+
 #[tokio::test]
 async fn test_rpc_native_call() {
     let state = common::create_test_state().await;
+    register_test_module(&state, "test_mod").await;
+    
     let registry = RpcRegistry::new();
     let handler = Arc::new(MockNativeHandler);
 
@@ -64,7 +82,7 @@ async fn test_rpc_native_call() {
         )
         .await;
 
-    assert!(res.is_ok());
+    assert!(res.is_ok(), "RPC call failed: {:?}", res);
     assert_eq!(res.unwrap()["message"], "Hello, Rust!");
 }
 
@@ -91,6 +109,8 @@ async fn test_rpc_not_found() {
 #[tokio::test]
 async fn test_rpc_max_depth() {
     let state = common::create_test_state().await;
+    register_test_module(&state, "rec_mod").await;
+    
     let registry = Arc::new(RpcRegistry::new());
 
     struct RecursiveHandler {

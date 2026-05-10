@@ -1,0 +1,12 @@
+[package]
+id = "storage"
+name = "Object Storage"
+version = "2.0.0"
+description = "S3-compatible file storage service"
+type = "module"
+
+[module]
+runtime_type = "native"
+
+[install]
+default_enabled = true

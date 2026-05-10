@@ -2,29 +2,29 @@
 <html lang="{{ langcode | default(value='ru') }}">
 <head>   
 <meta charset="{{ langcharset | default(value='UTF-8') }}" /> 
-<title>{% if seo is defined %}{{ seo.title }}{% elif title is defined %}{{ title }}{% else %}{{ site_name }}{% endif %}</title>
+<title>{% if seo is defined %}{{ seo.title }}{% elif title is defined %}{{ title }}{% else %}{{ site_name | default(value='Danneo 2.0') }}{% endif %}</title>
 <meta name="distribution" content="global" />
 <meta name="generator" content="Danneo 2.0 (Rust)" />
-<meta name="author" content="{{ site_name }}" />
-<meta name="copyright" content="Copyright (c) {{ site_name }}" />
-<meta name="keywords" content="{% if seo is defined %}{{ seo.keywords }}{% else %}{{ keywords | default(value='') }}{% endif %}" />
-<meta name="description" content="{% if seo is defined %}{{ seo.description }}{% else %}{{ descript | default(value='') }}{% endif %}" />
+<meta name="author" content="{{ site_name | default(value='Danneo') }}" />
+<meta name="copyright" content="Copyright (c) {{ site_name | default(value='Danneo') }}" />
+<meta name="keywords" content="{% if seo is defined %}{{ seo.keywords | default(value='') }}{% else %}{{ keywords | default(value='') }}{% endif %}" />
+<meta name="description" content="{% if seo is defined %}{{ seo.description | default(value='') }}{% else %}{{ descript | default(value='') }}{% endif %}" />
 <script src="/static/javascript/jquery.js"></script> 
 <script src="/static/javascript/jquery.colorbox.js"></script>
-<script src="/static/frontend/{{ site_temp }}/javascript/menu.js"></script>
-<script src="/static/frontend/{{ site_temp }}/javascript/soft.js"></script>
-<link rel="stylesheet" href="/static/frontend/{{ site_temp }}/css/screen.css" />
-<link rel="stylesheet" href="/static/frontend/{{ site_temp }}/css/menu.css" />  
-<link rel="stylesheet" href="/static/frontend/{{ site_temp }}/css/liquid-slider.css" /> 
-<link rel="stylesheet" href="/static/frontend/{{ site_temp }}/javascript/colorbox/colorbox.css" />
-<link rel="alternate" type="application/rss+xml" title="{{ site_name }}" href="/rss.php?dn=news" /> 
+<script src="/static/frontend/{{ site_temp | default(value='Soft') }}/javascript/menu.js"></script>
+<script src="/static/frontend/{{ site_temp | default(value='Soft') }}/javascript/soft.js"></script>
+<link rel="stylesheet" href="/static/frontend/{{ site_temp | default(value='Soft') }}/css/screen.css" />
+<link rel="stylesheet" href="/static/frontend/{{ site_temp | default(value='Soft') }}/css/menu.css" />  
+<link rel="stylesheet" href="/static/frontend/{{ site_temp | default(value='Soft') }}/css/liquid-slider.css" /> 
+<link rel="stylesheet" href="/static/frontend/{{ site_temp | default(value='Soft') }}/javascript/colorbox/colorbox.css" />
+<link rel="alternate" type="application/rss+xml" title="{{ site_name | default(value='Danneo') }}" href="/rss.php?dn=news" /> 
 <link rel="icon" href="/favicon.ico" type="image/x-icon" />
 <link rel="shortcut icon" href="/favicon.ico" type="image/x-icon" /> 
-<script>$(function(){ $.url = '{{ site_url }}'; });</script>
+<script>$(function(){ $.url = '{{ site_url | default(value='') }}'; });</script>
 </head>
 <body>
 <div id="logo">
- <div id="w1"><h1><a href="/" title="{{ site_name }}">{{ site_name }}</a></h1></div>
+ <div id="w1"><h1><a href="/" title="{{ site_name | default(value='Danneo') }}">{{ site_name | default(value='Danneo') }}</a></h1></div>
 </div>
 <div id="top-menu">
   <div id="w2">
@@ -46,7 +46,7 @@
     {{ positions.promoblock | default(value="") | safe }}
     {{ positions.topblock | default(value="") | safe }}
     
-    {% if seo is defined and seo.breadcrumbs | length > 0 %}
+    {% if seo is defined and seo.breadcrumbs is defined and seo.breadcrumbs | length > 0 %}
     <div class="site-title">
       {% for item in seo.breadcrumbs %}
         {% if loop.last %}
@@ -86,7 +86,7 @@
 </div>
 <table id="table-bot" cellspacing="0" cellpadding="0">
  <tr>
-  <td class="va al">&copy; 2026 {{ site_name }}</td>
+  <td class="va al">&copy; 2026 {{ site_name | default(value='Danneo') }}</td>
   <td class="va al"></td>
   <td class="va ar">Powered by <a href="/">Danneo 2.0</a></td>
  </tr>

@@ -3,13 +3,27 @@ use crate::state::AppState;
 use async_trait::async_trait;
 use axum::{Router, routing::{get, post}};
 use std::sync::Arc;
+use sea_orm::DatabaseConnection;
+
+pub mod migrations;
 
 pub struct SecurityModule;
 
 crate::inventory::submit! {
-    crate::module::NativeModuleRegistration {
-        name: "security",
-        factory: |_| Arc::new(SecurityModule),
+    migration::ModuleMigrationRegistration { migration: &migrations::CreateAdminTable }
+}
+
+crate::inventory::submit! {
+    migration::ModuleMigrationRegistration { migration: &migrations::UpdateCoreAdmins }
+}
+
+crate::inventory::submit! {
+    migration::ModuleMigrationRegistration { migration: &migrations::AddAdminGroupsAndLevels }
+}
+
+impl SecurityModule {
+    pub fn new(_db: Arc<DatabaseConnection>) -> Self {
+        Self
     }
 }
 
@@ -49,26 +63,11 @@ impl DanneoModule for SecurityModule {
         Ok(())
     }
 
-    async fn on_uninstall(&self, state: Arc<AppState>) -> Result<(), String> {
-        state.rpc_registry.call(
-            "admin_menu",
-            "unregister_module",
-            serde_json::json!({ "module": "security" }),
-            crate::rpc::RpcContext::default(),
-            state.clone()
-        ).await.ok();
-        Ok(())
-    }
-
     fn register_admin_routes(&self) -> Router<Arc<AppState>> {
         Router::new()
             .route("/admins", get(crate::apanel::amanage::list_admins))
-            .route("/admins/edit", get(crate::apanel::amanage::edit_admin))
-            .route("/admins/save", post(crate::apanel::amanage::save_admin))
-            .route("/admins/delete", post(crate::apanel::amanage::delete_admin))
             .route("/groups", get(crate::apanel::agroups::list_groups))
-            .route("/groups/edit/:id", get(crate::apanel::agroups::edit_group))
-            .route("/groups/save", post(crate::apanel::agroups::save_group))
-            .route("/groups/delete/:id", post(crate::apanel::agroups::delete_group))
     }
 }
+
+crate::register_native_module!("security", |db| Arc::new(SecurityModule::new(db)));

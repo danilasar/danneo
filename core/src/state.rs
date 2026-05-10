@@ -13,6 +13,11 @@ pub struct GlobalSettings {
     pub admin_email: String,
     pub site_url: String,
     pub site_temp: String,
+    pub storage_endpoint: String,
+    pub storage_access_key: String,
+    pub storage_secret_key: String,
+    pub storage_bucket: String,
+    pub storage_region: String,
 }
 
 pub struct AppState {
@@ -31,7 +36,9 @@ pub struct AppState {
 
 impl AppState {
     pub async fn new(db: DatabaseConnection) -> Result<Self, String> {
-        // 0. Run Core Migrations
+        crate::module::init_native_modules();
+
+        // 0. Core Migrations
         use sea_orm_migration::MigratorTrait;
         migration::Migrator::up(&db, None)
             .await
@@ -54,7 +61,7 @@ impl AppState {
         // 2. Discover and Register Native Modules via inventory
         {
             let modules_guard = modules.write().await;
-            for registration in inventory::iter::<crate::module::NativeModuleRegistration> {
+            for registration in inventory::iter::<crate::module::NativeModuleRegistration>() {
                 let module = (registration.factory)(db_arc.clone());
                 modules_guard.register_native(module).await;
             }
@@ -126,7 +133,7 @@ impl AppState {
             let b_is_base = b.1 == "apanel/base.html";
             if a_is_base && !b_is_base { std::cmp::Ordering::Less }
             else if !a_is_base && b_is_base { std::cmp::Ordering::Greater }
-            else { a.1.cmp(&b.1) }
+            else { a.1.get(0..1).cmp(&b.1.get(0..1)) }
         });
 
         for (path, name) in module_templates {
@@ -155,7 +162,13 @@ impl AppState {
             rpc_registry: rpc_registry.clone(),
         });
 
-        // 7. Automated Bootstrap
+        // 7. Initialize Registries and scan modules
+        {
+            let modules_guard = state.modules.read().await;
+            modules_guard.init(script_engine.clone(), state.routes.clone(), PathBuf::from(packages_dir), state.clone()).await;
+        }
+
+        // 8. Automated Bootstrap (runs on_install for core modules if clean DB)
         let installer = crate::registry::PackageInstaller::new(
             db_arc.clone(),
             state.packages.clone(),
@@ -166,12 +179,14 @@ impl AppState {
         );
         let _ = installer.bootstrap().await;
 
-        // 8. Final Module Initializations (Sync state with DB)
+        // 9. Final Module Initializations (Sync state with DB)
         {
             let modules_guard = state.modules.read().await;
             let native_modules = modules_guard.native_modules.read().await;
-            for module in native_modules.values() {
-                module.init(state.clone()).await.ok();
+            for (name, module) in native_modules.iter() {
+                if let Err(e) = module.init(state.clone()).await {
+                    tracing::error!("Failed to initialize native module {}: {}", name, e);
+                }
             }
         }
 
@@ -180,11 +195,6 @@ impl AppState {
             modules_guard.native_modules.read().await.clone()
         };
         block_registry.init(native_modules_map).await;
-        
-        {
-            let modules_guard = state.modules.read().await;
-            modules_guard.init(script_engine, state.routes.clone(), PathBuf::from(packages_dir), state.clone()).await;
-        }
 
         Ok(Arc::try_unwrap(state).unwrap_or_else(|arc| (*arc).clone_dummy()))
     }
@@ -205,7 +215,6 @@ impl AppState {
         }
     }
 
-    /// Проверка доступен ли модуль (установлен и включен)
     pub async fn is_module_available(&self, module_code: &str) -> bool {
         use crate::models::core_modules;
         use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};

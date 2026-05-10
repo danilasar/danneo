@@ -8,6 +8,7 @@ pub struct PackageManifest {
     pub module: Option<ModuleInfo>,
     pub compatibility: Option<CompatibilityInfo>,
     pub dependencies: Option<HashMap<String, String>>,
+    pub optional_dependencies: Option<HashMap<String, String>>,
     pub install: Option<InstallOptions>,
     pub entrypoints: Option<Entrypoints>,
     pub capabilities: Option<Capabilities>,

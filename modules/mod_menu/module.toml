@@ -8,6 +8,9 @@ type = "module"
 [module]
 runtime_type = "lua"
 
+[dependencies]
+admin_menu = ">=2.0.0"
+
 [entrypoints]
 hooks = "scripts/hooks.lua"
 

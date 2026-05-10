@@ -14,15 +14,15 @@ impl MigrationTrait for Migration {
         manager
             .create_table(
                 Table::create()
-                    .table(CoreSystemState::Table)
+                    .table(Alias::new("core_system_state"))
                     .if_not_exists()
                     .col(
-                        ColumnDef::new(CoreSystemState::Key)
+                        ColumnDef::new(Alias::new("key"))
                             .string()
                             .not_null()
                             .primary_key(),
                     )
-                    .col(ColumnDef::new(CoreSystemState::Value).string().not_null())
+                    .col(ColumnDef::new(Alias::new("value")).string().not_null())
                     .to_owned(),
             )
             .await?;
@@ -32,16 +32,9 @@ impl MigrationTrait for Migration {
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
         manager
-            .drop_table(Table::drop().table(CoreSystemState::Table).to_owned())
+            .drop_table(Table::drop().table(Alias::new("core_system_state")).to_owned())
             .await?;
 
         Ok(())
     }
-}
-
-#[derive(DeriveIden)]
-enum CoreSystemState {
-    Table,
-    Key,
-    Value,
 }

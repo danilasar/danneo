@@ -9,44 +9,46 @@ use std::sync::{
 };
 use tokio::sync::RwLock;
 
-#[derive(Debug, thiserror::Error)]
-pub enum ScriptError {
-    #[error("Lua runtime error: {0}")]
-    Runtime(String),
-    #[error("Lua parse error: {0}")]
-    Parse(String),
-    #[error("IO error: {0}")]
-    Io(#[from] std::io::Error),
-    #[error("Hook not found: {0}")]
-    HookNotFound(String),
-}
-
-impl From<mlua::Error> for ScriptError {
-    fn from(error: mlua::Error) -> Self {
-        ScriptError::Runtime(error.to_string())
-    }
-}
-
 const MAX_LUA_INSTRUCTIONS: usize = 100_000;
 
+#[derive(Debug, thiserror::Error)]
+pub enum ScriptError {
+    #[error("IO error: {0}")]
+    Io(#[from] std::io::Error),
+    #[error("Lua error: {0}")]
+    Lua(#[from] mlua::Error),
+    #[error("Hook not found: {0}")]
+    HookNotFound(String),
+    #[error("Runtime error: {0}")]
+    Runtime(String),
+}
+
 #[derive(Clone)]
-struct DatabaseApi {
+pub struct DatabaseApi {
     db: Arc<DatabaseConnection>,
     module_code: String,
 }
 
 impl DatabaseApi {
     fn prefix_table(&self, table: &str) -> String {
-        format!("mod_{}_{}", self.module_code, table)
+        if table.starts_with("core_") {
+            table.to_string()
+        } else {
+            format!("{}_{}", self.module_code, table)
+        }
     }
 
-    fn lua_error(error: impl std::fmt::Display) -> mlua::Error {
-        mlua::Error::external(error.to_string())
+    fn lua_error<E: std::fmt::Display>(e: E) -> mlua::Error {
+        mlua::Error::RuntimeError(e.to_string())
     }
 
-    fn register(self, lua: &Lua) -> mlua::Result<()> {
+    pub fn register(&self, lua: &Lua) -> Result<(), mlua::Error> {
         let db_table = lua.create_table()?;
+        self.register_to_table(&db_table, lua)?;
+        lua.globals().set("db", db_table)
+    }
 
+    pub fn register_to_table(&self, db_table: &mlua::Table, lua: &Lua) -> Result<(), mlua::Error> {
         let api = self.clone();
         db_table.set(
             "insert",
@@ -137,7 +139,7 @@ impl DatabaseApi {
             })?,
         )?;
 
-        let api = self;
+        let api = self.clone();
         db_table.set(
             "drop_table",
             lua.create_async_function(move |_, table: String| {
@@ -152,7 +154,7 @@ impl DatabaseApi {
             })?,
         )?;
 
-        lua.globals().set("db", db_table)
+        Ok(())
     }
 }
 
@@ -174,7 +176,6 @@ impl ScriptEngine {
         }
     }
 
-    /// Загружает скрипты модуля из указанного пути
     pub async fn load_module_scripts(
         &self,
         module_code: &str,
@@ -205,7 +206,6 @@ impl ScriptEngine {
         Ok(())
     }
 
-    /// Загружает скрипт из строки для конкретного модуля
     pub async fn load_script_str(
         &self,
         module_code: &str,
@@ -233,7 +233,7 @@ impl ScriptEngine {
 
         let lua = Lua::new();
 
-        // Ограничение по инструкциям
+        // Safety hook
         let count = Arc::new(AtomicUsize::new(0));
         let count_clone = count.clone();
         lua.set_hook(
@@ -243,22 +243,57 @@ impl ScriptEngine {
             },
             move |_, _| {
                 if count_clone.fetch_add(1000, Ordering::Relaxed) > MAX_LUA_INSTRUCTIONS {
-                    return Err(mlua::Error::RuntimeError(
-                        "Max Lua instructions reached".into(),
-                    ));
+                    return Err(mlua::Error::RuntimeError("Max Lua instructions reached".into()));
                 }
                 Ok(VmState::Continue)
             },
         )
         .map_err(|e| ScriptError::Runtime(e.to_string()))?;
 
-        DatabaseApi {
+        // ---------------------------------------------------------
+        // UNIFIED "danneo" API
+        // ---------------------------------------------------------
+        let danneo = lua.create_table()?;
+
+        // 1. danneo.db
+        let db_api = DatabaseApi {
             db: self.db.clone(),
             module_code: module_code.to_string(),
-        }
-        .register(&lua)?;
+        };
+        let db_table = lua.create_table()?;
+        db_api.register_to_table(&db_table, &lua)?;
+        danneo.set("db", &db_table)?;
 
-        // system api
+        // 2. danneo.rpc
+        let rpc_table = lua.create_table()?;
+        let rpc_reg = self.rpc_registry.clone();
+        let state_clone = state.clone();
+        rpc_table.set(
+            "call",
+            lua.create_async_function(move |lua, (namespace, method, payload): (String, String, Value)| {
+                let rpc = rpc_reg.clone();
+                let st = state_clone.clone();
+                async move {
+                    let ctx = crate::rpc::RpcContext::default();
+                    let res = rpc
+                        .call(
+                            &namespace,
+                            &method,
+                            lua.from_value(payload).unwrap_or(serde_json::Value::Null),
+                            ctx,
+                            st,
+                        )
+                        .await;
+                    match res {
+                        Ok(v) => lua.to_value(&v),
+                        Err(e) => Err(mlua::Error::RuntimeError(e.to_string())),
+                    }
+                }
+            })?,
+        )?;
+        danneo.set("rpc", &rpc_table)?;
+
+        // 3. danneo.system
         let system_table = lua.create_table()?;
         let st_sys = state.clone();
         system_table.set(
@@ -268,44 +303,70 @@ impl ScriptEngine {
                 async move { Ok(st.is_module_available(&module_code).await) }
             })?,
         )?;
-        lua.globals().set("system", system_table)?;
+        danneo.set("system", &system_table)?;
 
-        // rpc bridge
-        let rpc_table = lua.create_table()?;
-        let rpc_reg = self.rpc_registry.clone();
-        let state_clone = state.clone();
-        rpc_table.set(
-            "call",
-            lua.create_async_function(
-                move |lua,
-                      (namespace, method, payload, _context): (
-                    String,
-                    String,
-                    Value,
-                    Option<Value>,
-                )| {
-                    let rpc = rpc_reg.clone();
-                    let st = state_clone.clone();
-                    async move {
-                        let ctx = crate::rpc::RpcContext::default();
-                        let res = rpc
-                            .call(
-                                &namespace,
-                                &method,
-                                lua.from_value(payload).unwrap_or(serde_json::Value::Null),
-                                ctx,
-                                st,
-                            )
-                            .await;
-                        match res {
-                            Ok(v) => lua.to_value(&v),
-                            Err(e) => Err(mlua::Error::RuntimeError(e.to_string())),
-                        }
+        // 4. danneo.log
+        let log_table = lua.create_table()?;
+        log_table.set("info", lua.create_function(|_, msg: String| { tracing::info!("{}", msg); Ok(()) })?)?;
+        log_table.set("warn", lua.create_function(|_, msg: String| { tracing::warn!("{}", msg); Ok(()) })?)?;
+        log_table.set("error", lua.create_function(|_, msg: String| { tracing::error!("{}", msg); Ok(()) })?)?;
+        log_table.set("debug", lua.create_function(|_, msg: String| { tracing::debug!("{}", msg); Ok(()) })?)?;
+        danneo.set("log", &log_table)?;
+
+        // 5. danneo.fs
+        let fs_table = lua.create_table()?;
+        fs_table.set("read", lua.create_async_function(|_, path: String| async move {
+            tokio::fs::read_to_string(path).await.map_err(|e| mlua::Error::RuntimeError(e.to_string()))
+        })?)?;
+        fs_table.set("write", lua.create_async_function(|_, (path, content): (String, String)| async move {
+            tokio::fs::write(path, content).await.map_err(|e| mlua::Error::RuntimeError(e.to_string()))
+        })?)?;
+        fs_table.set("exists", lua.create_async_function(|_, path: String| async move {
+            Ok(std::path::Path::new(&path).exists())
+        })?)?;
+        danneo.set("fs", fs_table)?;
+
+        // 6. danneo.http
+        let http_table = lua.create_table()?;
+        http_table.set("request", lua.create_async_function(|lua, params: Value| async move {
+            let params_json: serde_json::Value = lua.from_value(params)?;
+            let method_str = params_json.get("method").and_then(|v| v.as_str()).unwrap_or("GET");
+            let url = params_json.get("url").and_then(|v| v.as_str()).ok_or_else(|| mlua::Error::RuntimeError("Missing URL".to_string()))?;
+            
+            let client = reqwest::Client::new();
+            let method = reqwest::Method::from_bytes(method_str.as_bytes()).unwrap_or(reqwest::Method::GET);
+            let mut builder = client.request(method, url);
+            
+            if let Some(headers) = params_json.get("headers").and_then(|v| v.as_object()) {
+                for (k, v) in headers {
+                    if let Some(val) = v.as_str() {
+                        builder = builder.header(k, val);
                     }
-                },
-            )?,
-        )?;
+                }
+            }
+            
+            if let Some(body) = params_json.get("body").and_then(|v| v.as_str()) {
+                builder = builder.body(body.to_string());
+            }
+
+            let resp = builder.send().await.map_err(|e| mlua::Error::RuntimeError(e.to_string()))?;
+            let status = resp.status().as_u16();
+            let body = resp.text().await.unwrap_or_default();
+            
+            lua.to_value(&serde_json::json!({
+                "status": status,
+                "body": body
+            }))
+        })?)?;
+        danneo.set("http", http_table)?;
+
+        lua.globals().set("danneo", danneo)?;
+        
+        // Backward compatibility aliases
+        lua.globals().set("db", db_table)?;
         lua.globals().set("rpc", rpc_table)?;
+        lua.globals().set("system", system_table)?;
+        lua.globals().set("log", log_table)?;
 
         lua.load(&script).exec_async().await?;
 
@@ -315,18 +376,14 @@ impl ScriptEngine {
             Err(_) => return Err(ScriptError::HookNotFound(hook_name.to_string())),
         };
 
-        // Convert Dynamic to Lua Value
         let json_value: serde_json::Value = script_rhai::serde::from_dynamic(&args)
             .map_err(|e| ScriptError::Runtime(e.to_string()))?;
-        let lua_args = lua
-            .to_value(&json_value)
+        let lua_args = lua.to_value(&json_value)
             .map_err(|e| ScriptError::Runtime(e.to_string()))?;
 
         let res: Value = hook.call_async(lua_args).await?;
 
-        // Convert Lua Value back to Dynamic via JSON
-        let json_value: serde_json::Value = lua
-            .from_value(res)
+        let json_value: serde_json::Value = lua.from_value(res)
             .map_err(|e| ScriptError::Runtime(e.to_string()))?;
         let result = script_rhai::serde::to_dynamic(json_value)
             .map_err(|e| ScriptError::Runtime(e.to_string()))?;

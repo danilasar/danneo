@@ -220,11 +220,15 @@ mod tests {
     #[tokio::test]
     async fn test_admin_login_success() {
         use crate::models::core_admins;
-        use sea_orm::{ActiveModelTrait, Database, Set};
+        use sea_orm::{ActiveModelTrait, Database, Set, ConnectionTrait, Statement};
 
         let db = Database::connect("sqlite::memory:").await.unwrap();
-        use sea_orm_migration::MigratorTrait;
-        migration::Migrator::up(&db, None).await.unwrap();
+        let state = Arc::new(AppState::new(db).await.unwrap());
+
+        // Debug: check tables
+        let tables = state.db.query_all(Statement::from_string(state.db.get_database_backend(), "SELECT name FROM sqlite_master WHERE type='table'")).await.unwrap();
+        let table_names: Vec<String> = tables.into_iter().map(|r| r.try_get("", "name").unwrap()).collect();
+        eprintln!("Test: existing tables: {:?}", table_names);
 
         let password = "my_secure_password";
         let password_hash = bcrypt::hash(password, 4).unwrap();
@@ -232,15 +236,11 @@ mod tests {
         core_admins::ActiveModel {
             login: Set("test_admin".to_string()),
             password_hash: Set(password_hash),
-            email: Set(Some("admin@test.com".to_string())),
-            permissions: Set(serde_json::json!(["all"])),
             ..Default::default()
         }
-        .insert(&db)
+        .insert(state.db.as_ref())
         .await
         .unwrap();
-
-        let state = Arc::new(AppState::new(db).await.unwrap());
 
         let payload = Json(LoginRequest {
             login: "test_admin".to_string(),

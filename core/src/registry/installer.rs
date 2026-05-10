@@ -34,10 +34,7 @@ impl PackageInstaller {
     }
 
     pub async fn refresh_registries(&self) {
-        // 1. Refresh package registry
         self.registry.write().await.scan();
-
-        // 2. Refresh module and route registries
         let packages_dir = self.registry.read().await.packages_dir.clone();
 
         {
@@ -138,7 +135,6 @@ impl PackageInstaller {
             registry.packages_dir.join(&module_code)
         };
 
-        // Check if upgrade
         use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
         let existing = crate::models::core_modules::Entity::find()
             .filter(crate::models::core_modules::Column::Code.eq(&module_code))
@@ -146,10 +142,7 @@ impl PackageInstaller {
             .await
             .map_err(|e| e.to_string())?;
 
-        // Transactional install/update
         let db = self.db.as_ref();
-
-        // 1. Move files with backup for rollback
         let backup_path = final_path.with_extension("bak");
         let has_backup = if final_path.exists() {
             std::fs::rename(&final_path, &backup_path).map_err(|e| e.to_string())?;
@@ -166,7 +159,6 @@ impl PackageInstaller {
         }
         self.registry.write().await.scan();
 
-        // 2. Database update
         let db_result: Result<(), String> = async {
             if let Some(module) = existing {
                 let mut active_model: crate::models::core_modules::ActiveModel = module.into();
@@ -175,11 +167,6 @@ impl PackageInstaller {
                     Set(serde_json::to_value(&manifest).map_err(|e| e.to_string())?);
                 active_model.updated_at = Set(now);
                 active_model.update(db).await.map_err(|e| e.to_string())?;
-                tracing::info!(
-                    "Module {} updated to version {}",
-                    module_code,
-                    manifest.package.version
-                );
             } else {
                 let module_model = crate::models::core_modules::ActiveModel {
                     code: Set(module_code.clone()),
@@ -212,74 +199,22 @@ impl PackageInstaller {
                     ..Default::default()
                 };
                 module_model.insert(db).await.map_err(|e| e.to_string())?;
-                tracing::info!(
-                    "Module {} installed version {}",
-                    module_code,
-                    manifest.package.version
-                );
             }
 
+            self.apply_lua_migrations(&module_code, &final_path).await?;
             self.install_module_blocks(&module_code).await?;
-
-            // 3. Entity handling
-            if let Some(entry) = manifest.entrypoints.as_ref() {
-                if let Some(entities_path) = &entry.entities {
-                    let ent_path = final_path.join(entities_path);
-                    let content = std::fs::read_to_string(&ent_path).map_err(|e| e.to_string())?;
-                    let schema: crate::crud::EntitySchema =
-                        serde_json::from_str(&content).map_err(|e| e.to_string())?;
-
-                    // Create physical table (if not exists)
-                    crate::crud::create_entity_table(&self.db, &schema)
-                        .await
-                        .map_err(|e| e.to_string())?;
-
-                    // Update metadata
-                    use crate::models::core_module_entities::Entity as EntEntity;
-                    let existing_ent = EntEntity::find()
-                        .filter(
-                            crate::models::core_module_entities::Column::ModuleCode
-                                .eq(&module_code),
-                        )
-                        .filter(
-                            crate::models::core_module_entities::Column::EntityName
-                                .eq(&schema.table_name),
-                        )
-                        .one(db)
-                        .await
-                        .map_err(|e| e.to_string())?;
-
-                    if let Some(ent) = existing_ent {
-                        let mut ent_active: crate::models::core_module_entities::ActiveModel =
-                            ent.into();
-                        ent_active.schema = Set(serde_json::to_value(&schema).unwrap());
-                        ent_active.update(db).await.map_err(|e| e.to_string())?;
-                    } else {
-                        let entity_model = crate::models::core_module_entities::ActiveModel {
-                            module_code: Set(module_code.clone()),
-                            entity_name: Set(schema.table_name.clone()),
-                            table_name: Set(schema.table_name.clone()),
-                            schema: Set(serde_json::to_value(&schema).unwrap()),
-                            ..Default::default()
-                        };
-                        entity_model.insert(db).await.map_err(|e| e.to_string())?;
-                    }
-                }
-            }
             Ok(())
         }
         .await;
 
         if let Err(e) = db_result {
-            // Rollback files
             let _ = std::fs::remove_dir_all(&final_path);
             if has_backup {
                 let _ = std::fs::rename(&backup_path, &final_path);
             }
-            return Err(format!("Database error during installation: {}", e));
+            return Err(format!("Database error: {}", e));
         }
 
-        // 4. Hook loading (we don't rollback if hooks fail for now, but we could)
         if let Some(entry) = manifest.entrypoints.as_ref() {
             if let Some(hooks_path) = &entry.hooks {
                 let full_hooks_path = final_path.join(hooks_path);
@@ -299,160 +234,131 @@ impl PackageInstaller {
             }
         }
 
-        // Clean up backup
         if has_backup {
             let _ = std::fs::remove_dir_all(&backup_path);
         }
 
-        // 5. Rescan registries to pick up changes
         self.refresh_registries().await;
-
         Ok(())
     }
 
-    pub async fn install(&self, package_id: &str) -> Result<(), String> {
-        // 1. Try Native first
-        if self.install_kernel_module(package_id).await.unwrap_or(false) {
-            return Ok(());
+    async fn apply_lua_migrations(&self, module_code: &str, module_dir: &std::path::Path) -> Result<(), String> {
+        let migrations_dir = module_dir.join("migrations");
+        if !migrations_dir.exists() { return Ok(()); }
+
+        let mut files: Vec<_> = std::fs::read_dir(migrations_dir).map_err(|e| e.to_string())?
+            .filter_map(|e| e.ok())
+            .filter(|e| e.path().extension().map_or(false, |ext| ext == "lua"))
+            .collect();
+        
+        files.sort_by_key(|e| e.file_name());
+
+        let db = self.db.as_ref();
+        let backend = db.get_database_backend();
+
+        for entry in files {
+            let file_name = entry.file_name().to_string_lossy().to_string();
+            
+            let (sql, values) = sea_query::Query::select()
+                .column(sea_query::Alias::new("id"))
+                .from(sea_query::Alias::new("core_lua_migrations"))
+                .and_where(sea_query::Expr::col(sea_query::Alias::new("module_code")).eq(module_code))
+                .and_where(sea_query::Expr::col(sea_query::Alias::new("migration_name")).eq(&file_name))
+                .build_any(match backend {
+                    sea_orm::DatabaseBackend::Postgres => &sea_query::PostgresQueryBuilder,
+                    sea_orm::DatabaseBackend::MySql => &sea_query::MysqlQueryBuilder,
+                    sea_orm::DatabaseBackend::Sqlite => &sea_query::SqliteQueryBuilder,
+                });
+
+            let exists = db.query_one(Statement::from_sql_and_values(backend, &sql, values))
+                .await.unwrap_or(None).is_some();
+
+            if exists { continue; }
+
+            let script = std::fs::read_to_string(entry.path()).map_err(|e| e.to_string())?;
+            let wrapped_script = format!("
+                local mig = (function() 
+                    {}
+                end)()
+                if mig and type(mig.up) == 'function' then
+                    return mig.up()
+                end
+                error('Migration must return a table with an up function')
+            ", script);
+
+            self.script_engine.load_script_str(&format!("{}_mig", module_code), &wrapped_script).await.map_err(|e| e.to_string())?;
+            let _ = self.script_engine.call_hook(&format!("{}_mig", module_code), "up", script_rhai::Dynamic::UNIT, self.state.clone()).await;
+
+            let (sql, values) = sea_query::Query::insert()
+                .into_table(sea_query::Alias::new("core_lua_migrations"))
+                .columns([sea_query::Alias::new("module_code"), sea_query::Alias::new("migration_name")])
+                .values_panic([module_code.into(), file_name.into()])
+                .build_any(match backend {
+                    sea_orm::DatabaseBackend::Postgres => &sea_query::PostgresQueryBuilder,
+                    sea_orm::DatabaseBackend::MySql => &sea_query::MysqlQueryBuilder,
+                    sea_orm::DatabaseBackend::Sqlite => &sea_query::SqliteQueryBuilder,
+                });
+            db.execute(Statement::from_sql_and_values(backend, &sql, values)).await.map_err(|e| e.to_string())?;
         }
-
-        // 2. Try Registry (Lua)
-        let manifest_data = {
-            let registry = self.registry.read().await;
-            if let Some(m) = registry.packages.get(package_id) {
-                Some((m.clone(), true)) // (manifest, is_module)
-            } else {
-                None
-            }
-        };
-
-        if let Some((manifest, is_module)) = manifest_data {
-            if is_module {
-                let module_code = manifest.package.id.clone();
-                let now = chrono::Utc::now().into();
-
-                let module_model = crate::models::core_modules::ActiveModel {
-                    code: Set(module_code.clone()),
-                    name: Set(manifest.package.name.clone()),
-                    version: Set(manifest.package.version.clone()),
-                    package_id: Set(0),
-                    package_path: Set(format!("modules/{}", module_code)),
-                    package_hash: Set("temp_hash".to_string()),
-                    runtime_type: Set(manifest
-                        .module
-                        .as_ref()
-                        .map(|m| m.runtime_type.clone())
-                        .unwrap_or_else(|| "lua".to_string())),
-                    enabled: Set(manifest
-                        .install
-                        .as_ref()
-                        .and_then(|i| i.default_enabled)
-                        .unwrap_or(false)),
-                    installed: Set(true),
-                    position: Set(0),
-                    admin_enabled: Set(manifest
-                        .entrypoints
-                        .as_ref()
-                        .map(|e| e.admin_routes.is_some())
-                        .unwrap_or(false)),
-                    sitemap_enabled: Set(false),
-                    manifest: Set(serde_json::to_value(&manifest).map_err(|e| e.to_string())?),
-                    installed_at: Set(now),
-                    updated_at: Set(now),
-                    ..Default::default()
-                };
-
-                if let Err(e) = module_model.insert(self.db.as_ref()).await {
-                    tracing::error!("Failed to install module {}: {}", package_id, e);
-                    return Err(e.to_string());
-                }
-
-                if let Some(entry) = manifest.entrypoints.as_ref() {
-                    let module_dir = {
-                        let registry = self.registry.read().await;
-                        registry.packages_dir.join(&module_code)
-                    };
-                    if let Some(hooks_path) = &entry.hooks {
-                        let full_hooks_path = module_dir.join(hooks_path);
-                        if let Err(e) = self
-                            .script_engine
-                            .load_module_scripts(&module_code, &full_hooks_path)
-                            .await
-                        {
-                            tracing::error!(
-                                "Failed to load hooks for module {}: {}",
-                                module_code,
-                                e
-                            );
-                        } else {
-                            tracing::info!("Calling on_install hook for module {}", &module_code);
-                            let result = self
-                                .script_engine
-                                .call_hook(
-                                    &module_code,
-                                    "on_install",
-                                    script_rhai::Dynamic::UNIT,
-                                    self.state.clone(),
-                                )
-                                .await;
-                            if let Err(e) = result {
-                                tracing::error!(
-                                    "Failed to run on_install hook for module {}: {}",
-                                    module_code,
-                                    e
-                                );
-                            }
-                        }
-                    }
-                    if let Some(entities_path) = &entry.entities {
-                        let ent_path = module_dir.join(entities_path);
-                        let content =
-                            std::fs::read_to_string(&ent_path).map_err(|e| e.to_string())?;
-                        let schema: crate::crud::EntitySchema =
-                            serde_json::from_str(&content).map_err(|e| e.to_string())?;
-                        crate::crud::create_entity_table(&self.db, &schema)
-                            .await
-                            .map_err(|e| e.to_string())?;
-                        let entity_model = crate::models::core_module_entities::ActiveModel {
-                            module_code: Set(module_code.clone()),
-                            entity_name: Set(schema.table_name.clone()),
-                            table_name: Set(schema.table_name.clone()),
-                            schema: Set(serde_json::to_value(&schema).unwrap()),
-                            ..Default::default()
-                        };
-                        entity_model
-                            .insert(self.db.as_ref())
-                            .await
-                            .map_err(|e| e.to_string())?;
-                    }
-                }
-                self.install_module_blocks(&module_code).await?;
-                self.refresh_registries().await;
-                return Ok(());
-            }
-        }
-
-        let registered_keys: Vec<_> = self.registry.read().await.packages.keys().cloned().collect();
-        Err(format!("Package {} not found in registry (available: {:?})", package_id, registered_keys))
+        Ok(())
     }
 
-    pub async fn install_kernel_module(&self, module_code: &str) -> Result<bool, String> {
+    async fn rollback_lua_migrations(&self, module_code: &str, module_dir: &std::path::Path) -> Result<(), String> {
+        let migrations_dir = module_dir.join("migrations");
+        if !migrations_dir.exists() { return Ok(()); }
+
+        let db = self.db.as_ref();
+        let backend = db.get_database_backend();
+
+        let (sql, values) = sea_query::Query::select()
+            .columns([sea_query::Alias::new("migration_name")])
+            .from(sea_query::Alias::new("core_lua_migrations"))
+            .and_where(sea_query::Expr::col(sea_query::Alias::new("module_code")).eq(module_code))
+            .order_by(sea_query::Alias::new("id"), sea_query::Order::Desc)
+            .build_any(match backend {
+                sea_orm::DatabaseBackend::Postgres => &sea_query::PostgresQueryBuilder,
+                sea_orm::DatabaseBackend::MySql => &sea_query::MysqlQueryBuilder,
+                sea_orm::DatabaseBackend::Sqlite => &sea_query::SqliteQueryBuilder,
+            });
+
+        let rows = db.query_all(Statement::from_sql_and_values(backend, &sql, values)).await.map_err(|e| e.to_string())?;
+
+        for row in rows {
+            let file_name: String = row.try_get("", "migration_name").unwrap_or_default();
+            let file_path = migrations_dir.join(&file_name);
+            
+            if file_path.exists() {
+                let script = std::fs::read_to_string(file_path).map_err(|e| e.to_string())?;
+                let wrapped_script = format!("
+                    local mig = (function() 
+                        {}
+                    end)()
+                    if mig and type(mig.down) == 'function' then
+                        return mig.down()
+                    end
+                ", script);
+
+                self.script_engine.load_script_str(&format!("{}_rollback", module_code), &wrapped_script).await.map_err(|e| e.to_string())?;
+                let _ = self.script_engine.call_hook(&format!("{}_rollback", module_code), "down", script_rhai::Dynamic::UNIT, self.state.clone()).await;
+            }
+
+            let (sql, values) = sea_query::Query::delete()
+                .from_table(sea_query::Alias::new("core_lua_migrations"))
+                .and_where(sea_query::Expr::col(sea_query::Alias::new("module_code")).eq(module_code))
+                .and_where(sea_query::Expr::col(sea_query::Alias::new("migration_name")).eq(&file_name))
+                .build_any(match backend {
+                    sea_orm::DatabaseBackend::Postgres => &sea_query::PostgresQueryBuilder,
+                    sea_orm::DatabaseBackend::MySql => &sea_query::MysqlQueryBuilder,
+                    sea_orm::DatabaseBackend::Sqlite => &sea_query::SqliteQueryBuilder,
+                });
+            db.execute(Statement::from_sql_and_values(backend, &sql, values)).await.ok();
+        }
+        Ok(())
+    }
+
+    async fn register_native_in_db(&self, module_code: &str, version: &str) -> Result<(), String> {
         use crate::models::core_modules;
         use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, IntoActiveModel, QueryFilter, Set};
-
-        let module = {
-            let modules = self.modules.read().await;
-            modules
-                .native_modules
-                .read()
-                .await
-                .get(module_code)
-                .cloned()
-        };
-        let Some(module) = module else {
-            return Ok(false);
-        };
-
         let now: chrono::DateTime<chrono::FixedOffset> = chrono::Utc::now().into();
         let existing = core_modules::Entity::find()
             .filter(core_modules::Column::Code.eq(module_code))
@@ -462,38 +368,23 @@ impl PackageInstaller {
 
         if let Some(model) = existing {
             let mut active = model.into_active_model();
+            active.version = Set(version.to_string());
             active.enabled = Set(true);
             active.installed = Set(true);
             active.updated_at = Set(now);
-            active
-                .update(self.db.as_ref())
-                .await
-                .map_err(|e| e.to_string())?;
+            active.update(self.db.as_ref()).await.map_err(|e| e.to_string())?;
         } else {
             core_modules::ActiveModel {
                 code: Set(module_code.to_string()),
                 name: Set(module_code.to_string()),
-                version: Set("kernel".to_string()),
+                version: Set(version.to_string()),
                 package_id: Set(0),
-                package_path: Set("kernel".to_string()),
-                package_hash: Set("kernel".to_string()),
+                package_path: Set(format!("kernel/{}", module_code)),
+                package_hash: Set("native".to_string()),
                 runtime_type: Set("native".to_string()),
                 enabled: Set(true),
                 installed: Set(true),
-                position: Set(0),
-                admin_enabled: Set(true),
-                sitemap_enabled: Set(false),
-                manifest: Set(serde_json::json!({
-                    "package": {
-                        "id": module_code,
-                        "type": "kernel",
-                        "version": "kernel",
-                        "name": module_code
-                    },
-                    "module": {
-                        "runtime_type": "native"
-                    }
-                })),
+                manifest: Set(serde_json::json!({})),
                 installed_at: Set(now),
                 updated_at: Set(now),
                 ..Default::default()
@@ -502,45 +393,125 @@ impl PackageInstaller {
             .await
             .map_err(|e| e.to_string())?;
         }
-
-        module.on_install(self.state.clone()).await?;
-        module.init(self.state.clone()).await?;
-        Ok(true)
+        Ok(())
     }
 
-    pub async fn uninstall_kernel_module(&self, module_code: &str) -> Result<bool, String> {
+    pub async fn install(&self, package_id: &str) -> Result<(), String> {
+        let registration = inventory::iter::<crate::module::NativeModuleRegistration>()
+            .find(|r| r.name == package_id);
+
+        if let Some(reg) = registration {
+            let module = (reg.factory)(self.db.clone());
+            module.on_install(self.state.clone()).await?;
+            module.init(self.state.clone()).await?;
+            self.register_native_in_db(package_id, "2.0.0").await?;
+            self.refresh_registries().await;
+            return Ok(());
+        }
+
+        let manifest = {
+            let registry = self.registry.read().await;
+            registry.packages.get(package_id).cloned()
+        }.ok_or_else(|| format!("Package {} not found", package_id))?;
+
+        let mut active_modules = std::collections::HashMap::new();
         use crate::models::core_modules;
+        use sea_orm::EntityTrait;
+        let installed = core_modules::Entity::find().all(self.db.as_ref()).await.unwrap_or_default();
+        for m in installed {
+            if m.enabled {
+                if let Ok(v) = semver::Version::parse(&m.version) {
+                    active_modules.insert(m.code, v);
+                }
+            }
+        }
+
+        if let Some(deps) = &manifest.dependencies {
+            for (dep_id, req_str) in deps {
+                let req = semver::VersionReq::parse(req_str).map_err(|e| e.to_string())?;
+                if let Some(found_ver) = active_modules.get(dep_id) {
+                    if !req.matches(found_ver) {
+                        return Err(format!("Dependency mismatch: {} requires {}, found {}", package_id, req_str, found_ver));
+                    }
+                } else {
+                    return Err(format!("Missing mandatory dependency: {} for {}", dep_id, package_id));
+                }
+            }
+        }
+
+        let module_code = manifest.package.id.clone();
+        let now = chrono::Utc::now().into();
+
+        let module_model = crate::models::core_modules::ActiveModel {
+            code: Set(module_code.clone()),
+            name: Set(manifest.package.name.clone()),
+            version: Set(manifest.package.version.clone()),
+            package_id: Set(0),
+            package_path: Set(format!("modules/{}", module_code)),
+            package_hash: Set("temp_hash".to_string()),
+            runtime_type: Set(manifest.module.as_ref().map(|m| m.runtime_type.clone()).unwrap_or_else(|| "lua".to_string())),
+            enabled: Set(manifest.install.as_ref().and_then(|i| i.default_enabled).unwrap_or(false)),
+            installed: Set(true),
+            manifest: Set(serde_json::to_value(&manifest).map_err(|e| e.to_string())?),
+            installed_at: Set(now),
+            updated_at: Set(now),
+            ..Default::default()
+        };
+
+        module_model.insert(self.db.as_ref()).await.map_err(|e| e.to_string())?;
+        let module_dir = {
+            let registry = self.registry.read().await;
+            registry.packages_dir.join(&module_code)
+        };
+
+        self.apply_lua_migrations(&module_code, &module_dir).await?;
+
+        if let Some(entry) = manifest.entrypoints.as_ref() {
+            if let Some(hooks_path) = &entry.hooks {
+                let full_hooks_path = module_dir.join(hooks_path);
+                let _ = self.script_engine.load_module_scripts(&module_code, &full_hooks_path).await;
+                let _ = self.script_engine.call_hook(&module_code, "on_install", script_rhai::Dynamic::UNIT, self.state.clone()).await;
+            }
+        }
+        self.install_module_blocks(&module_code).await?;
+        self.refresh_registries().await;
+        Ok(())
+    }
+
+    pub async fn uninstall(&self, package_id: &str) -> Result<(), String> {
+        let registration = inventory::iter::<crate::module::NativeModuleRegistration>()
+            .find(|r| r.name == package_id);
+        
+        if let Some(reg) = registration {
+             let module = (reg.factory)(self.db.clone());
+             module.on_uninstall(self.state.clone()).await?;
+        }
+
+        let module_dir = {
+            let registry = self.registry.read().await;
+            registry.packages_dir.join(package_id)
+        };
+
+        self.rollback_lua_migrations(package_id, &module_dir).await.ok();
+        let _ = self.script_engine.call_hook(package_id, "on_uninstall", script_rhai::Dynamic::UNIT, self.state.clone()).await;
+
         use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
-
-        let module = {
-            let modules = self.modules.read().await;
-            modules
-                .native_modules
-                .read()
-                .await
-                .get(module_code)
-                .cloned()
-        };
-        let Some(module) = module else {
-            return Ok(false);
-        };
-
-        module.on_uninstall(self.state.clone()).await?;
-        core_modules::Entity::delete_many()
-            .filter(core_modules::Column::Code.eq(module_code))
+        crate::models::core_modules::Entity::delete_many()
+            .filter(crate::models::core_modules::Column::Code.eq(package_id))
             .exec(self.db.as_ref())
-            .await
-            .map_err(|e| e.to_string())?;
-        Ok(true)
+            .await.ok();
+
+        self.refresh_registries().await;
+        Ok(())
     }
 
     pub async fn bootstrap(&self) -> Result<(), String> {
         use crate::models::core_modules;
-        use sea_orm::{EntityTrait, ColumnTrait, QueryFilter};
+        use sea_orm::{ConnectionTrait, Statement, EntityTrait, ColumnTrait, QueryFilter};
         let db = self.db.as_ref();
         let backend = db.get_database_backend();
+        use sea_query::{Alias, Query, Expr};
 
-        // 0. Check if system was ALREADY bootstrapped via dedicated system table
         let (sql, values) = Query::select()
             .column(Alias::new("value"))
             .from(Alias::new("core_system_state"))
@@ -551,20 +522,16 @@ impl PackageInstaller {
                 sea_orm::DatabaseBackend::Sqlite => &sea_query::SqliteQueryBuilder,
             });
 
-        let bootstrapped = db.query_one(Statement::from_sql_and_values(backend, &sql, values))
-            .await.unwrap_or(None);
+        let bootstrapped_row = db.query_one(Statement::from_sql_and_values(backend, &sql, values)).await;
         
-        if let Some(row) = bootstrapped {
-             let val: String = row.try_get("", "value").unwrap_or_default();
-             if val == "true" {
-                 tracing::info!("System already bootstrapped (flag found), skipping automation");
-                 return Ok(());
-             }
+        match bootstrapped_row {
+            Ok(Some(row)) => {
+                 let val: String = row.try_get("", "value").unwrap_or_default();
+                 if val == "true" { return Ok(()); }
+            },
+            _ => {}
         }
         
-        tracing::info!("Checking system bootstrap status...");
-
-        // 1. Core modules (always required)
         let core_modules = vec![
             "admin_menu".to_string(),
             "settings".to_string(),
@@ -572,35 +539,12 @@ impl PackageInstaller {
             "blocks".to_string(),
             "seo".to_string(),
             "security".to_string(),
+            "storage".to_string(),
+            "mod_media".to_string(),
             "mod_menu".to_string(),
         ];
 
-        // 2. Optional modules from bootstrap.toml
-        let mut modules_to_install = core_modules;
-        let bootstrap_path = std::path::Path::new("bootstrap.toml");
-        if bootstrap_path.exists() {
-            if let Ok(content) = std::fs::read_to_string(bootstrap_path) {
-                #[derive(serde::Deserialize)]
-                struct BootstrapConfig {
-                    bootstrap: BootstrapModules,
-                }
-                #[derive(serde::Deserialize)]
-                struct BootstrapModules {
-                    modules: Vec<String>,
-                }
-
-                if let Ok(config) = toml::from_str::<BootstrapConfig>(&content) {
-                    for m in config.bootstrap.modules {
-                        if !modules_to_install.contains(&m) {
-                            modules_to_install.push(m);
-                        }
-                    }
-                }
-            }
-        }
-
-        // 3. Install missing core modules
-        for module_id in modules_to_install {
+        for module_id in core_modules {
             let existing = core_modules::Entity::find()
                 .filter(core_modules::Column::Code.eq(&module_id))
                 .one(self.db.as_ref())
@@ -608,95 +552,22 @@ impl PackageInstaller {
                 .unwrap_or(None);
 
             if existing.is_none() {
-                tracing::info!("Bootstrapping missing core module: {}", module_id);
-                if let Err(e) = self.install(&module_id).await {
-                    tracing::error!("Failed to bootstrap module {}: {}", module_id, e);
-                }
-            } else if let Some(m) = existing {
-                if !m.enabled {
-                    tracing::info!("Enabling core module: {}", module_id);
-                    let _ = self.modules.read().await.enable(&module_id).await;
-                    self.refresh_registries().await;
-                }
+                let _ = self.install(&module_id).await;
             }
         }
 
-        // 4. Set the bootstrapped flag in system table
         let (sql, values) = Query::insert()
             .into_table(Alias::new("core_system_state"))
             .columns([Alias::new("key"), Alias::new("value")])
             .values_panic(["is_bootstrapped".into(), "true".into()])
+            .on_conflict(sea_query::OnConflict::column(Alias::new("key")).update_column(Alias::new("value")).to_owned())
             .build_any(match backend {
                 sea_orm::DatabaseBackend::Postgres => &sea_query::PostgresQueryBuilder,
                 sea_orm::DatabaseBackend::MySql => &sea_query::MysqlQueryBuilder,
                 sea_orm::DatabaseBackend::Sqlite => &sea_query::SqliteQueryBuilder,
             });
 
-        if let Err(e) = db.execute(Statement::from_sql_and_values(backend, &sql, values)).await {
-            tracing::error!("Failed to set bootstrap flag: {}", e);
-        }
-
-        tracing::info!("Bootstrap completed successfully");
+        let _ = db.execute(Statement::from_sql_and_values(backend, &sql, values)).await;
         Ok(())
-    }
-
-    pub async fn uninstall(&self, package_id: &str) -> Result<(), String> {
-        use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
-
-        // 1. Call on_uninstall hook
-        let _ = self
-            .script_engine
-            .call_hook(
-                package_id,
-                "on_uninstall",
-                script_rhai::Dynamic::UNIT,
-                self.state.clone(),
-            )
-            .await;
-
-        // 2. Delete module record and clean up dynamic entities
-        let module_res = crate::models::core_modules::Entity::delete_many()
-            .filter(crate::models::core_modules::Column::Code.eq(package_id))
-            .exec(self.db.as_ref())
-            .await;
-
-        if let Ok(res) = module_res {
-            if res.rows_affected > 0 {
-                // Remove dynamic entity tables and metadata
-                use crate::models::core_module_entities::Entity as EntEntity;
-                let ents = EntEntity::find()
-                    .filter(crate::models::core_module_entities::Column::ModuleCode.eq(package_id))
-                    .all(self.db.as_ref())
-                    .await
-                    .unwrap_or_default();
-                for ent in ents {
-                    let _ = crate::crud::drop_entity_table(&self.db, &ent.table_name).await;
-                }
-                // Delete metadata rows
-                EntEntity::delete_many()
-                    .filter(crate::models::core_module_entities::Column::ModuleCode.eq(package_id))
-                    .exec(self.db.as_ref())
-                    .await
-                    .ok();
-
-                crate::models::core_block_definitions::Entity::delete_many()
-                    .filter(
-                        crate::models::core_block_definitions::Column::ModuleCode.eq(package_id),
-                    )
-                    .exec(self.db.as_ref())
-                    .await
-                    .ok();
-
-                // Rescan registries
-                self.refresh_registries().await;
-                tracing::info!(
-                    "Module {} uninstalled and dynamic tables dropped",
-                    package_id
-                );
-                return Ok(());
-            }
-        }
-
-        Err(format!("Package {} is not installed", package_id))
     }
 }

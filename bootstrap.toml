@@ -6,6 +6,9 @@ modules = [
     "blocks",
     "seo",
     "security",
+    "storage",
+    "mod_media",
+    "image",
     "mod_menu",
     "mod_news"
 ]

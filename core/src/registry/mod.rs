@@ -1,4 +1,5 @@
 pub mod block_registry;
+pub mod dependency;
 pub mod installer;
 pub mod manifest;
 pub mod module_registry;

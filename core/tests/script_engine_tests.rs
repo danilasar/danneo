@@ -76,10 +76,10 @@ async fn test_script_runtime_error() {
         .call_hook("test_mod", "fail", Dynamic::UNIT, state.clone())
         .await;
     match result {
-        Err(ScriptError::Runtime(e)) => {
+        Err(ScriptError::Runtime(e)) | Err(ScriptError::Lua(mlua::Error::RuntimeError(e))) => {
             assert!(e.to_string().contains("Custom Error"));
         }
-        _ => panic!("Expected runtime error"),
+        _ => panic!("Expected runtime error, got {:?}", result),
     }
 }
 

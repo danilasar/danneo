@@ -3,20 +3,26 @@ use crate::state::AppState;
 use async_trait::async_trait;
 use axum::{Router, routing::{get, post}};
 use std::sync::Arc;
+use sea_orm::DatabaseConnection;
 
-pub struct DesignModule;
+pub mod migrations;
+
+pub struct BlocksModule;
 
 crate::inventory::submit! {
-    crate::module::NativeModuleRegistration {
-        name: "design",
-        factory: |_| Arc::new(DesignModule),
+    migration::ModuleMigrationRegistration { migration: &migrations::CreateBlockTables }
+}
+
+impl BlocksModule {
+    pub fn new(_db: Arc<DatabaseConnection>) -> Self {
+        Self
     }
 }
 
 #[async_trait]
-impl DanneoModule for DesignModule {
+impl DanneoModule for BlocksModule {
     fn name(&self) -> &'static str {
-        "design"
+        "blocks"
     }
 
     async fn init(&self, state: Arc<AppState>) -> Result<(), String> {
@@ -25,14 +31,14 @@ impl DanneoModule for DesignModule {
             "admin_menu",
             "register_items",
             serde_json::json!({
-                "module": "design",
+                "module": "blocks",
                 "items": [
                     {
                         "code": "manage",
                         "category": "settings",
-                        "label": "admin_design",
-                        "link": "/admin/design",
-                        "weight": 35
+                        "label": "admin_blocks",
+                        "link": "/admin/blocks",
+                        "weight": 40
                     }
                 ]
             }),
@@ -42,20 +48,12 @@ impl DanneoModule for DesignModule {
         Ok(())
     }
 
-    async fn on_uninstall(&self, state: Arc<AppState>) -> Result<(), String> {
-        state.rpc_registry.call(
-            "admin_menu",
-            "unregister_module",
-            serde_json::json!({ "module": "design" }),
-            crate::rpc::RpcContext::default(),
-            state.clone()
-        ).await.ok();
-        Ok(())
-    }
-
     fn register_admin_routes(&self) -> Router<Arc<AppState>> {
         Router::new()
-            .route("/", get(crate::apanel::design::show_design))
-            .route("/save", post(crate::apanel::design::save_file))
+            .route("/", get(crate::apanel::blocks::list_blocks))
+            .route("/positions", get(crate::apanel::blocks::list_positions))
+            .route("/save_position", post(crate::apanel::blocks::save_position))
     }
 }
+
+crate::register_native_module!("blocks", |db| Arc::new(BlocksModule::new(db)));
