@@ -27,7 +27,7 @@ impl MigrationTrait for Migration {
                     .table(CoreAdmins::Table)
                     .add_column(
                         ColumnDef::new(CoreAdmins::Permissions)
-                            .json()
+                            .json_binary()
                             .not_null()
                             .default(Expr::value(serde_json::json!([]))),
                     )

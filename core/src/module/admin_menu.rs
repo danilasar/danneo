@@ -1,12 +1,11 @@
 use crate::module::DanneoModule;
-use crate::registry::{
-    AdminMenu, AdminMenuCategory, AdminMenuItem, AdminMenuManifest, AdminMenuSupercategory,
-    ItemContribution, CategoryContribution
-};
-use crate::rpc::{RpcContext, RpcError, RpcVisibility, RpcMethodDescriptor};
 use crate::state::AppState;
+use crate::registry::{AdminMenu, AdminMenuCategory, AdminMenuItem, AdminMenuSupercategory, AdminMenuManifest, ItemContribution, CategoryContribution};
+use crate::rpc::{RpcContext, RpcError, RpcVisibility, RpcMethodDescriptor};
 use async_trait::async_trait;
+use axum::Router;
 use sea_orm::{ConnectionTrait, DatabaseConnection, Statement};
+use sea_query::{Alias, Query, ColumnDef, Table};
 use std::sync::Arc;
 use tracing::info;
 
@@ -44,6 +43,7 @@ impl AdminMenuModule {
                 categories: Vec::new(),
             });
         }
+        tracing::debug!("Found {} supercategories", supercategories.len());
 
         // 2. Загружаем Категории
         let cat_rows = db.query_all(Statement::from_string(
@@ -51,6 +51,7 @@ impl AdminMenuModule {
             "SELECT super_code, code, label_key, icon, weight FROM core_admin_menu_categories ORDER BY weight ASC"
         )).await.unwrap_or_default();
 
+        let mut cat_count = 0;
         for row in cat_rows {
             let super_code: String = row.try_get("", "super_code").unwrap();
             let code: String = row.try_get("", "code").unwrap();
@@ -66,14 +67,43 @@ impl AdminMenuModule {
                     weight,
                     items: Vec::new(),
                 });
+                cat_count += 1;
             }
         }
+        tracing::debug!("Found {} categories", cat_count);
 
-        // 3. Загружаем Пункты меню
-        let item_rows = db.query_all(Statement::from_string(
-            backend,
-            "SELECT code, category_code, label_key, link, weight, acl_key FROM core_admin_menu_items WHERE is_hidden = FALSE ORDER BY weight ASC"
-        )).await.unwrap_or_default();
+        // 3. Загружаем Пункты меню (только для включенных модулей)
+        use sea_query::{Expr, JoinType};
+        let (sql, values) = Query::select()
+            .columns([
+                (Alias::new("i"), Alias::new("code")),
+                (Alias::new("i"), Alias::new("category_code")),
+                (Alias::new("i"), Alias::new("label_key")),
+                (Alias::new("i"), Alias::new("link")),
+                (Alias::new("i"), Alias::new("weight")),
+                (Alias::new("i"), Alias::new("acl_key")),
+            ])
+            .from_as(Alias::new("core_admin_menu_items"), Alias::new("i"))
+            .join_as(
+                JoinType::InnerJoin,
+                Alias::new("core_modules"),
+                Alias::new("m"),
+                Expr::col((Alias::new("i"), Alias::new("module_code")))
+                    .eq(Expr::col((Alias::new("m"), Alias::new("code"))))
+            )
+            .and_where(Expr::col((Alias::new("i"), Alias::new("is_hidden"))).eq(false))
+            .and_where(Expr::col((Alias::new("m"), Alias::new("enabled"))).eq(true))
+            .order_by((Alias::new("i"), Alias::new("weight")), sea_query::Order::Asc)
+            .build_any(match backend {
+                sea_orm::DatabaseBackend::Postgres => &sea_query::PostgresQueryBuilder,
+                sea_orm::DatabaseBackend::MySql => &sea_query::MysqlQueryBuilder,
+                sea_orm::DatabaseBackend::Sqlite => &sea_query::SqliteQueryBuilder,
+            });
+
+        let item_rows = db.query_all(Statement::from_sql_and_values(backend, &sql, values))
+            .await.unwrap_or_default();
+        
+        tracing::debug!("Found {} menu items from enabled modules", item_rows.len());
 
         for row in item_rows {
             let cat_code: String = row.try_get("", "category_code").unwrap();
@@ -104,13 +134,13 @@ impl AdminMenuModule {
             }
         }
 
-        // Удаляем пустые категории и надкатегории если это "effective" режим
-        if admin_id.is_some() {
-            for super_cat in &mut supercategories {
-                super_cat.categories.retain(|c| !c.items.is_empty());
-            }
-            supercategories.retain(|s| !s.categories.is_empty());
+        // Удаляем пустые категории и надкатегории
+        for super_cat in &mut supercategories {
+            super_cat.categories.retain(|c| !c.items.is_empty());
         }
+        supercategories.retain(|s| !s.categories.is_empty());
+
+        tracing::debug!("Final menu has {} supercategories after pruning", supercategories.len());
 
         AdminMenu { supercategories }
     }
@@ -137,40 +167,52 @@ impl AdminMenuModule {
         manifest: AdminMenuManifest,
     ) -> Result<(), String> {
         let db = self.db.as_ref();
+        let backend = db.get_database_backend();
 
         // 1. Обрабатываем предложенные категории
         if let Some(categories) = manifest.categories {
             for cat in categories {
-                let exists = db
-                    .query_one(Statement::from_sql_and_values(
-                        db.get_database_backend(),
-                        "SELECT id FROM core_admin_menu_categories WHERE code = ?",
-                        vec![cat.code.clone().into()],
-                    ))
-                    .await
-                    .unwrap_or(None)
-                    .is_some();
+                let (sql, values) = Query::select()
+                    .column(Alias::new("id"))
+                    .from(Alias::new("core_admin_menu_categories"))
+                    .and_where(sea_query::Expr::col(Alias::new("code")).eq(cat.code.clone()))
+                    .build_any(match backend {
+                        sea_orm::DatabaseBackend::Postgres => &sea_query::PostgresQueryBuilder,
+                        sea_orm::DatabaseBackend::MySql => &sea_query::MysqlQueryBuilder,
+                        sea_orm::DatabaseBackend::Sqlite => &sea_query::SqliteQueryBuilder,
+                    });
+
+                let exists = db.query_one(Statement::from_sql_and_values(backend, &sql, values))
+                    .await.unwrap_or(None).is_some();
 
                 if !exists {
-                    info!(
-                        "Creating managed category '{}' for module {}",
-                        cat.code, module_code
-                    );
-                    let sql = "INSERT INTO core_admin_menu_categories (super_code, code, label_key, icon, weight, is_managed) VALUES (?, ?, ?, ?, ?, ?)";
-                    db.execute(Statement::from_sql_and_values(
-                        db.get_database_backend(),
-                        sql,
-                        vec![
+                    info!("Creating managed category '{}' for module {}", cat.code, module_code);
+                    let (sql, values) = Query::insert()
+                        .into_table(Alias::new("core_admin_menu_categories"))
+                        .columns([
+                            Alias::new("super_code"),
+                            Alias::new("code"),
+                            Alias::new("label_key"),
+                            Alias::new("icon"),
+                            Alias::new("weight"),
+                            Alias::new("is_managed"),
+                        ])
+                        .values_panic([
                             cat.parent.into(),
                             cat.code.into(),
                             cat.label.into(),
                             cat.icon.into(),
                             cat.weight.unwrap_or(0).into(),
                             true.into(),
-                        ],
-                    ))
-                    .await
-                    .map_err(|e| e.to_string())?;
+                        ])
+                        .build_any(match backend {
+                            sea_orm::DatabaseBackend::Postgres => &sea_query::PostgresQueryBuilder,
+                            sea_orm::DatabaseBackend::MySql => &sea_query::MysqlQueryBuilder,
+                            sea_orm::DatabaseBackend::Sqlite => &sea_query::SqliteQueryBuilder,
+                        });
+                    
+                    db.execute(Statement::from_sql_and_values(backend, &sql, values))
+                        .await.map_err(|e| e.to_string())?;
                 }
             }
         }
@@ -179,21 +221,31 @@ impl AdminMenuModule {
         if let Some(items) = manifest.items {
             for item in items {
                 let full_code = format!("{}.{}", module_code, item.code);
+                
+                // Удаляем старую запись с таким же кодом
+                let (sql, values) = Query::delete()
+                    .from_table(Alias::new("core_admin_menu_items"))
+                    .and_where(sea_query::Expr::col(Alias::new("code")).eq(full_code.clone()))
+                    .build_any(match backend {
+                        sea_orm::DatabaseBackend::Postgres => &sea_query::PostgresQueryBuilder,
+                        sea_orm::DatabaseBackend::MySql => &sea_query::MysqlQueryBuilder,
+                        sea_orm::DatabaseBackend::Sqlite => &sea_query::SqliteQueryBuilder,
+                    });
+                
+                db.execute(Statement::from_sql_and_values(backend, &sql, values)).await.ok();
 
-                // Удаляем старую запись с таким же кодом (если есть)
-                db.execute(Statement::from_sql_and_values(
-                    db.get_database_backend(),
-                    "DELETE FROM core_admin_menu_items WHERE code = ?",
-                    vec![full_code.clone().into()],
-                ))
-                .await
-                .ok();
-
-                let sql = "INSERT INTO core_admin_menu_items (code, category_code, module_code, label_key, link, weight, acl_key) VALUES (?, ?, ?, ?, ?, ?, ?)";
-                db.execute(Statement::from_sql_and_values(
-                    db.get_database_backend(),
-                    sql,
-                    vec![
+                let (sql, values) = Query::insert()
+                    .into_table(Alias::new("core_admin_menu_items"))
+                    .columns([
+                        Alias::new("code"),
+                        Alias::new("category_code"),
+                        Alias::new("module_code"),
+                        Alias::new("label_key"),
+                        Alias::new("link"),
+                        Alias::new("weight"),
+                        Alias::new("acl_key"),
+                    ])
+                    .values_panic([
                         full_code.into(),
                         item.category.into(),
                         module_code.into(),
@@ -201,10 +253,15 @@ impl AdminMenuModule {
                         item.link.into(),
                         item.weight.unwrap_or(0).into(),
                         item.acl_key.into(),
-                    ],
-                ))
-                .await
-                .map_err(|e| e.to_string())?;
+                    ])
+                    .build_any(match backend {
+                        sea_orm::DatabaseBackend::Postgres => &sea_query::PostgresQueryBuilder,
+                        sea_orm::DatabaseBackend::MySql => &sea_query::MysqlQueryBuilder,
+                        sea_orm::DatabaseBackend::Sqlite => &sea_query::SqliteQueryBuilder,
+                    });
+                
+                db.execute(Statement::from_sql_and_values(backend, &sql, values))
+                    .await.map_err(|e| e.to_string())?;
             }
         }
 
@@ -213,12 +270,19 @@ impl AdminMenuModule {
 
     /// Удаление пунктов меню при деинсталляции модуля
     pub async fn remove_module_items(&self, module_code: &str) -> Result<(), String> {
-        self.db
-            .execute(Statement::from_sql_and_values(
-                self.db.get_database_backend(),
-                "DELETE FROM core_admin_menu_items WHERE module_code = ?",
-                vec![module_code.into()],
-            ))
+        let db = self.db.as_ref();
+        let backend = db.get_database_backend();
+
+        let (sql, values) = Query::delete()
+            .from_table(Alias::new("core_admin_menu_items"))
+            .and_where(sea_query::Expr::col(Alias::new("module_code")).eq(module_code))
+            .build_any(match backend {
+                sea_orm::DatabaseBackend::Postgres => &sea_query::PostgresQueryBuilder,
+                sea_orm::DatabaseBackend::MySql => &sea_query::MysqlQueryBuilder,
+                sea_orm::DatabaseBackend::Sqlite => &sea_query::SqliteQueryBuilder,
+            });
+
+        db.execute(Statement::from_sql_and_values(backend, &sql, values))
             .await
             .map_err(|e| e.to_string())?;
         Ok(())
@@ -231,84 +295,94 @@ impl DanneoModule for AdminMenuModule {
         "admin_menu"
     }
 
-    async fn init(&self, _state: Arc<AppState>) -> Result<(), String> {
+    async fn on_install(&self, _state: Arc<AppState>) -> Result<(), String> {
         let db = self.db.as_ref();
         let backend = db.get_database_backend();
+        use sea_orm_migration::prelude::SchemaManager;
+        let manager = SchemaManager::new(db);
 
         // 1. Создание таблиц
-        db.execute_unprepared("
-            CREATE TABLE IF NOT EXISTS core_admin_menu_supercategories (
-                id SERIAL PRIMARY KEY,
-                code VARCHAR(255) NOT NULL UNIQUE,
-                label_key VARCHAR(255) NOT NULL,
-                weight INTEGER NOT NULL DEFAULT 0
-            );").await.map_err(|e| e.to_string())?;
+        manager.create_table(Table::create().table(Alias::new("core_admin_menu_supercategories")).if_not_exists()
+            .col(ColumnDef::new(Alias::new("id")).integer().not_null().auto_increment().primary_key())
+            .col(ColumnDef::new(Alias::new("code")).string().not_null().unique_key())
+            .col(ColumnDef::new(Alias::new("label_key")).string().not_null())
+            .col(ColumnDef::new(Alias::new("weight")).integer().not_null().default(0))
+            .to_owned()).await.map_err(|e| e.to_string())?;
 
-        db.execute_unprepared("
-            CREATE TABLE IF NOT EXISTS core_admin_menu_categories (
-                id SERIAL PRIMARY KEY,
-                super_code VARCHAR(255) NOT NULL,
-                code VARCHAR(255) NOT NULL UNIQUE,
-                label_key VARCHAR(255) NOT NULL,
-                icon VARCHAR(255),
-                weight INTEGER NOT NULL DEFAULT 0,
-                is_managed BOOLEAN NOT NULL DEFAULT FALSE
-            );").await.map_err(|e| e.to_string())?;
+        manager.create_table(Table::create().table(Alias::new("core_admin_menu_categories")).if_not_exists()
+            .col(ColumnDef::new(Alias::new("id")).integer().not_null().auto_increment().primary_key())
+            .col(ColumnDef::new(Alias::new("super_code")).string().not_null())
+            .col(ColumnDef::new(Alias::new("code")).string().not_null().unique_key())
+            .col(ColumnDef::new(Alias::new("label_key")).string().not_null())
+            .col(ColumnDef::new(Alias::new("icon")).string())
+            .col(ColumnDef::new(Alias::new("weight")).integer().not_null().default(0))
+            .col(ColumnDef::new(Alias::new("is_managed")).boolean().not_null().default(false))
+            .to_owned()).await.map_err(|e| e.to_string())?;
 
-        db.execute_unprepared("
-            CREATE TABLE IF NOT EXISTS core_admin_menu_items (
-                id SERIAL PRIMARY KEY,
-                code VARCHAR(255) NOT NULL UNIQUE,
-                category_code VARCHAR(255) NOT NULL,
-                module_code VARCHAR(255) NOT NULL,
-                label_key VARCHAR(255) NOT NULL,
-                link VARCHAR(255) NOT NULL,
-                weight INTEGER NOT NULL DEFAULT 0,
-                acl_key VARCHAR(255),
-                is_hidden BOOLEAN NOT NULL DEFAULT FALSE
-            );
-        ").await.map_err(|e| e.to_string())?;
+        manager.create_table(Table::create().table(Alias::new("core_admin_menu_items")).if_not_exists()
+            .col(ColumnDef::new(Alias::new("id")).integer().not_null().auto_increment().primary_key())
+            .col(ColumnDef::new(Alias::new("code")).string().not_null().unique_key())
+            .col(ColumnDef::new(Alias::new("category_code")).string().not_null())
+            .col(ColumnDef::new(Alias::new("module_code")).string().not_null())
+            .col(ColumnDef::new(Alias::new("label_key")).string().not_null())
+            .col(ColumnDef::new(Alias::new("link")).string().not_null())
+            .col(ColumnDef::new(Alias::new("weight")).integer().not_null().default(0))
+            .col(ColumnDef::new(Alias::new("acl_key")).string())
+            .col(ColumnDef::new(Alias::new("is_hidden")).boolean().not_null().default(false))
+            .to_owned()).await.map_err(|e| e.to_string())?;
 
 
-        // 2. Наполнение базовыми данными (только если пусто)
-        let count_scat = db
-            .query_one(Statement::from_string(
-                backend,
-                "SELECT COUNT(*) as count FROM core_admin_menu_supercategories",
-            ))
-            .await
-            .unwrap()
-            .unwrap()
-            .try_get::<i64>("", "count")
-            .unwrap_or(0);
-
+        // 2. Наполнение базовыми данными
+        let count_scat = db.query_one(Statement::from_string(backend, "SELECT COUNT(*) as count FROM core_admin_menu_supercategories"))
+            .await.unwrap().unwrap().try_get::<i64>("", "count").unwrap_or(0);
+        
         if count_scat == 0 {
-            db.execute_unprepared("
-                INSERT INTO core_admin_menu_supercategories (code, label_key, weight) VALUES 
-                ('content', 'admin_content', 10),
-                ('system', 'admin_system', 20),
-                ('tools', 'admin_tools', 30);
-                
-                INSERT INTO core_admin_menu_categories (super_code, code, label_key, icon, weight, is_managed) VALUES 
-                ('content', 'infopages', 'admin_infopages', 'infopages.gif', 10, FALSE),
-                ('content', 'news', 'admin_news', 'news.gif', 20, FALSE),
-                ('system', 'settings', 'admin_settings_title', 'setting.gif', 10, FALSE),
-                ('system', 'security', 'admin_security', 'user.gif', 20, FALSE);
+            let insert_scat = Query::insert().into_table(Alias::new("core_admin_menu_supercategories"))
+                .columns([Alias::new("code"), Alias::new("label_key"), Alias::new("weight")])
+                .values_panic(["content".into(), "admin_content".into(), 10.into()])
+                .values_panic(["system".into(), "admin_system".into(), 20.into()])
+                .values_panic(["tools".into(), "admin_tools".into(), 30.into()])
+                .to_owned();
+            db.execute(backend.build(&insert_scat)).await.map_err(|e| e.to_string())?;
 
-                INSERT INTO core_admin_menu_items (code, category_code, module_code, label_key, link, weight, is_hidden) VALUES 
-                ('core.modules', 'settings', 'core', 'Модули и пакеты', '/admin/modules', 30, FALSE),
-                ('core.blocks', 'settings', 'core', 'admin_blocks', '/admin/blocks', 40, FALSE),
-                ('core.menu', 'settings', 'core', 'admin_menu', '/admin/menu', 50, FALSE),
-                ('core.amanage', 'security', 'core', 'admin_amanage', '/admin/amanage', 10, FALSE),
-                ('core.agroups', 'security', 'core', 'admin_agroups', '/admin/agroups', 20, FALSE);
-            ").await.map_err(|e| e.to_string())?;
+            let insert_cat = Query::insert().into_table(Alias::new("core_admin_menu_categories"))
+                .columns([Alias::new("super_code"), Alias::new("code"), Alias::new("label_key"), Alias::new("icon"), Alias::new("weight"), Alias::new("is_managed")])
+                .values_panic(["system".into(), "settings".into(), "admin_settings_title".into(), "setting.gif".into(), 10.into(), false.into()])
+                .values_panic(["system".into(), "security".into(), "admin_security".into(), "user.gif".into(), 20.into(), false.into()])
+                .to_owned();
+            db.execute(backend.build(&insert_cat)).await.map_err(|e| e.to_string())?;
         }
-
-        info!("Admin Menu Native Module initialized and schema verified");
         Ok(())
     }
 
-    async fn on_install(&self, _state: Arc<AppState>) -> Result<(), String> {
+    async fn init(&self, _state: Arc<AppState>) -> Result<(), String> {
+        // Register OWN items via RPC
+        self.call_rpc(
+            "register_items",
+            serde_json::json!({
+                "module": "admin_menu",
+                "items": [
+                    {
+                        "code": "modules",
+                        "category": "settings",
+                        "label": "Модули и пакеты",
+                        "link": "/admin/modules",
+                        "weight": 30
+                    },
+                    {
+                        "code": "menu",
+                        "category": "settings",
+                        "label": "admin_menu",
+                        "link": "/admin/menu_system",
+                        "weight": 55
+                    }
+                ]
+            }),
+            crate::rpc::RpcContext::default(),
+            _state.clone()
+        ).await.ok();
+
+        info!("Admin Menu Native Module initialized");
         Ok(())
     }
 
@@ -321,9 +395,15 @@ impl DanneoModule for AdminMenuModule {
                 visibility: RpcVisibility::Internal,
             },
             RpcMethodDescriptor {
+                name: "get_effective_tree".to_string(),
+                handler: "get_effective_tree".to_string(),
+                permission: Some("admin.view".to_string()),
+                visibility: RpcVisibility::Internal,
+            },
+            RpcMethodDescriptor {
                 name: "register_items".to_string(),
                 handler: "register_items".to_string(),
-                permission: None, // Обычно вызывается ядром или при установке
+                permission: None,
                 visibility: RpcVisibility::Internal,
             },
             RpcMethodDescriptor {
@@ -357,9 +437,10 @@ impl DanneoModule for AdminMenuModule {
         &self,
         method: &str,
         payload: serde_json::Value,
-        ctx: RpcContext,
+        _ctx: RpcContext,
         state: Arc<AppState>,
     ) -> Result<serde_json::Value, RpcError> {
+        let backend = self.db.get_database_backend();
         match method {
             "get_tree" => {
                 let tree = self.build_menu(None, None).await;
@@ -371,25 +452,15 @@ impl DanneoModule for AdminMenuModule {
                 Ok(serde_json::to_value(tree).unwrap())
             }
             "register_items" => {
-                let module_code = payload
-                    .get("module")
-                    .and_then(|v| v.as_str())
-                    .ok_or_else(|| RpcError::BadRequest("Missing 'module'".to_string()))?;
-                let items_val = payload
-                    .get("items")
-                    .ok_or_else(|| RpcError::BadRequest("Missing 'items'".to_string()))?;
-                let items: Vec<ItemContribution> = serde_json::from_value(items_val.clone())
-                    .map_err(|e| RpcError::BadRequest(e.to_string()))?;
-
-                // We need to map ItemContribution to DB fields.
-                // Actually process_contribution handles a whole manifest. Let's adapt it.
+                let module_code = payload.get("module").and_then(|v| v.as_str()).ok_or_else(|| RpcError::BadRequest("Missing 'module'".to_string()))?;
+                let items_val = payload.get("items").ok_or_else(|| RpcError::BadRequest("Missing 'items'".to_string()))?;
+                let items: Vec<ItemContribution> = serde_json::from_value(items_val.clone()).map_err(|e| RpcError::BadRequest(e.to_string()))?;
+                
                 let manifest = AdminMenuManifest {
                     categories: None,
                     items: Some(items),
                 };
-                self.process_contribution(module_code, manifest)
-                    .await
-                    .map_err(|e| RpcError::Runtime(e))?;
+                self.process_contribution(module_code, manifest).await.map_err(|e| RpcError::Runtime(e))?;
                 Ok(serde_json::json!({ "status": "success" }))
             }
             "unregister_module" => {
@@ -398,11 +469,16 @@ impl DanneoModule for AdminMenuModule {
                 
                 match mode {
                     "disable" => {
-                        self.db.execute(Statement::from_sql_and_values(
-                            self.db.get_database_backend(),
-                            "UPDATE core_admin_menu_items SET is_hidden = TRUE WHERE module_code = ?",
-                            vec![module_code.into()]
-                        )).await.map_err(|e| RpcError::Runtime(e.to_string()))?;
+                        let (sql, values) = Query::update()
+                            .table(Alias::new("core_admin_menu_items"))
+                            .value(Alias::new("is_hidden"), true)
+                            .and_where(sea_query::Expr::col(Alias::new("module_code")).eq(module_code))
+                            .build_any(match backend {
+                                sea_orm::DatabaseBackend::Postgres => &sea_query::PostgresQueryBuilder,
+                                sea_orm::DatabaseBackend::MySql => &sea_query::MysqlQueryBuilder,
+                                sea_orm::DatabaseBackend::Sqlite => &sea_query::SqliteQueryBuilder,
+                            });
+                        self.db.execute(Statement::from_sql_and_values(backend, &sql, values)).await.map_err(|e| RpcError::Runtime(e.to_string()))?;
                     },
                     "remove" | _ => {
                         self.remove_module_items(module_code).await.map_err(|e| RpcError::Runtime(e))?;
@@ -412,58 +488,75 @@ impl DanneoModule for AdminMenuModule {
             }
             "ensure_category" => {
                 let cat_val = payload.clone();
-                let cat: CategoryContribution = serde_json::from_value(cat_val)
-                    .map_err(|e| RpcError::BadRequest(e.to_string()))?;
+                let cat: CategoryContribution = serde_json::from_value(cat_val).map_err(|e| RpcError::BadRequest(e.to_string()))?;
                 let manifest = AdminMenuManifest {
                     categories: Some(vec![cat]),
                     items: None,
                 };
-                self.process_contribution("system", manifest)
-                    .await
-                    .map_err(|e| RpcError::Runtime(e))?;
+                self.process_contribution("system", manifest).await.map_err(|e| RpcError::Runtime(e))?;
                 Ok(serde_json::json!({ "status": "success" }))
             }
             "move_item" => {
-                let item_code = payload
-                    .get("item")
-                    .and_then(|v| v.as_str())
-                    .ok_or_else(|| RpcError::BadRequest("Missing 'item'".to_string()))?;
-                let category = payload
-                    .get("category")
-                    .and_then(|v| v.as_str())
-                    .ok_or_else(|| RpcError::BadRequest("Missing 'category'".to_string()))?;
+                let item_code = payload.get("item").and_then(|v| v.as_str()).ok_or_else(|| RpcError::BadRequest("Missing 'item'".to_string()))?;
+                let category = payload.get("category").and_then(|v| v.as_str()).ok_or_else(|| RpcError::BadRequest("Missing 'category'".to_string()))?;
                 let weight = payload.get("weight").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
 
-                self.db.execute(Statement::from_sql_and_values(
-                    self.db.get_database_backend(),
-                    "UPDATE core_admin_menu_items SET category_code = ?, weight = ? WHERE code = ?",
-                    vec![category.into(), weight.into(), item_code.into()]
-                )).await.map_err(|e| RpcError::Runtime(e.to_string()))?;
+                let (sql, values) = Query::update()
+                    .table(Alias::new("core_admin_menu_items"))
+                    .values([
+                        (Alias::new("category_code"), category.into()),
+                        (Alias::new("weight"), weight.into()),
+                    ])
+                    .and_where(sea_query::Expr::col(Alias::new("code")).eq(item_code))
+                    .build_any(match backend {
+                        sea_orm::DatabaseBackend::Postgres => &sea_query::PostgresQueryBuilder,
+                        sea_orm::DatabaseBackend::MySql => &sea_query::MysqlQueryBuilder,
+                        sea_orm::DatabaseBackend::Sqlite => &sea_query::SqliteQueryBuilder,
+                    });
 
+                self.db.execute(Statement::from_sql_and_values(backend, &sql, values)).await.map_err(|e| RpcError::Runtime(e.to_string()))?;
+                
                 Ok(serde_json::json!({ "status": "success" }))
             }
             "set_item_visibility" => {
-                let item_code = payload
-                    .get("item")
-                    .and_then(|v| v.as_str())
-                    .ok_or_else(|| RpcError::BadRequest("Missing 'item'".to_string()))?;
-                let visible = payload
-                    .get("visible")
-                    .and_then(|v| v.as_bool())
-                    .ok_or_else(|| RpcError::BadRequest("Missing 'visible'".to_string()))?;
+                let item_code = payload.get("item").and_then(|v| v.as_str()).ok_or_else(|| RpcError::BadRequest("Missing 'item'".to_string()))?;
+                let visible = payload.get("visible").and_then(|v| v.as_bool()).ok_or_else(|| RpcError::BadRequest("Missing 'visible'".to_string()))?;
 
-                self.db
-                    .execute(Statement::from_sql_and_values(
-                        self.db.get_database_backend(),
-                        "UPDATE core_admin_menu_items SET is_hidden = ? WHERE code = ?",
-                        vec![(!visible).into(), item_code.into()],
-                    ))
-                    .await
-                    .map_err(|e| RpcError::Runtime(e.to_string()))?;
+                let (sql, values) = Query::update()
+                    .table(Alias::new("core_admin_menu_items"))
+                    .value(Alias::new("is_hidden"), !visible)
+                    .and_where(sea_query::Expr::col(Alias::new("code")).eq(item_code))
+                    .build_any(match backend {
+                        sea_orm::DatabaseBackend::Postgres => &sea_query::PostgresQueryBuilder,
+                        sea_orm::DatabaseBackend::MySql => &sea_query::MysqlQueryBuilder,
+                        sea_orm::DatabaseBackend::Sqlite => &sea_query::SqliteQueryBuilder,
+                    });
 
+                self.db.execute(Statement::from_sql_and_values(backend, &sql, values)).await.map_err(|e| RpcError::Runtime(e.to_string()))?;
+                
                 Ok(serde_json::json!({ "status": "success" }))
             }
             _ => Err(RpcError::NotFound(method.to_string())),
         }
+    }
+
+    fn register_admin_routes(&self) -> Router<Arc<AppState>> {
+        use axum::routing::get;
+        Router::new()
+            .route("/", get(|| async { axum::response::Html("<h1>Admin Menu Management</h1><p>Work in progress.</p>") }))
+    }
+
+    fn admin_routes(&self) -> Vec<crate::registry::RouteDescriptor> {
+        use crate::registry::RouteDescriptor;
+        vec![
+            RouteDescriptor {
+                name: "admin_menu.manage".to_string(),
+                method: "GET".to_string(),
+                path: "/menu_system".to_string(), // Was /menu, now unique
+                handler: "manage".to_string(),
+                entity: None,
+                template: None,
+            }
+        ]
     }
 }

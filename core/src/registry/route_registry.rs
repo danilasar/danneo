@@ -11,15 +11,23 @@ pub struct RouteDescriptor {
 }
 
 pub struct RouteRegistry {
-    pub routes: Vec<(String, RouteDescriptor)>, // module_code, descriptor
+    pub frontend_routes: Vec<(String, RouteDescriptor)>, // module_code, descriptor
+    pub admin_routes: Vec<(String, RouteDescriptor)>,    // module_code, descriptor
 }
 
 impl RouteRegistry {
     pub fn new() -> Self {
-        Self { routes: Vec::new() }
+        Self { 
+            frontend_routes: Vec::new(),
+            admin_routes: Vec::new(),
+        }
     }
 
-    pub fn register(&mut self, module_code: &str, descriptor: RouteDescriptor) {
-        self.routes.push((module_code.to_string(), descriptor));
+    pub fn register_frontend(&mut self, module_code: &str, descriptor: RouteDescriptor) {
+        self.frontend_routes.push((module_code.to_string(), descriptor));
+    }
+
+    pub fn register_admin(&mut self, module_code: &str, descriptor: RouteDescriptor) {
+        self.admin_routes.push((module_code.to_string(), descriptor));
     }
 }

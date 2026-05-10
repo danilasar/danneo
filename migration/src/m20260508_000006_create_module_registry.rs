@@ -39,7 +39,11 @@ impl MigrationTrait for Migration {
                     .col(ColumnDef::new(CorePackages::Hash).string().not_null())
                     .col(ColumnDef::new(CorePackages::Signature).string())
                     .col(ColumnDef::new(CorePackages::Status).string().not_null())
-                    .col(ColumnDef::new(CorePackages::Manifest).json().not_null())
+                    .col(
+                        ColumnDef::new(CorePackages::Manifest)
+                            .json_binary()
+                            .not_null(),
+                    )
                     .col(
                         ColumnDef::new(CorePackages::UploadedAt)
                             .timestamp_with_time_zone()
@@ -106,9 +110,13 @@ impl MigrationTrait for Migration {
                             .default(false),
                     )
                     .col(ColumnDef::new(CoreModules::Theme).string())
-                    .col(ColumnDef::new(CoreModules::Manifest).json().not_null())
-                    .col(ColumnDef::new(CoreModules::Settings).json())
-                    .col(ColumnDef::new(CoreModules::Capabilities).json())
+                    .col(
+                        ColumnDef::new(CoreModules::Manifest)
+                            .json_binary()
+                            .not_null(),
+                    )
+                    .col(ColumnDef::new(CoreModules::Settings).json_binary())
+                    .col(ColumnDef::new(CoreModules::Capabilities).json_binary())
                     .col(
                         ColumnDef::new(CoreModules::InstalledAt)
                             .timestamp_with_time_zone()
@@ -189,7 +197,7 @@ impl MigrationTrait for Migration {
                     .col(ColumnDef::new(CoreModuleRoutes::Permission).string())
                     .col(
                         ColumnDef::new(CoreModuleRoutes::Descriptor)
-                            .json()
+                            .json_binary()
                             .not_null(),
                     )
                     .to_owned(),
@@ -223,7 +231,11 @@ impl MigrationTrait for Migration {
                             .string()
                             .not_null(),
                     )
-                    .col(ColumnDef::new(CoreModuleEntities::Schema).json().not_null())
+                    .col(
+                        ColumnDef::new(CoreModuleEntities::Schema)
+                            .json_binary()
+                            .not_null(),
+                    )
                     .to_owned(),
             )
             .await?;
@@ -239,7 +251,11 @@ impl MigrationTrait for Migration {
                             .not_null(),
                     )
                     .col(ColumnDef::new(CoreModuleSettings::Key).string().not_null())
-                    .col(ColumnDef::new(CoreModuleSettings::Value).json().not_null())
+                    .col(
+                        ColumnDef::new(CoreModuleSettings::Value)
+                            .json_binary()
+                            .not_null(),
+                    )
                     .col(
                         ColumnDef::new(CoreModuleSettings::UpdatedAt)
                             .timestamp_with_time_zone()
@@ -291,10 +307,10 @@ impl MigrationTrait for Migration {
                     )
                     .col(
                         ColumnDef::new(CoreBlockDefinitions::Manifest)
-                            .json()
+                            .json_binary()
                             .not_null(),
                     )
-                    .col(ColumnDef::new(CoreBlockDefinitions::SettingsSchema).json())
+                    .col(ColumnDef::new(CoreBlockDefinitions::SettingsSchema).json_binary())
                     .col(ColumnDef::new(CoreBlockDefinitions::TemplatePath).string())
                     .col(
                         ColumnDef::new(CoreBlockDefinitions::RendererType)

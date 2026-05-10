@@ -14,37 +14,47 @@ impl DanneoModule for NativeDemoModule {
     }
 
     async fn on_install(&self, state: Arc<AppState>) -> Result<(), String> {
-        state.rpc_registry.call(
-            "admin_menu",
-            "register_items",
-            serde_json::json!({
-                "module": "native_demo",
-                "items": [
-                    {
-                        "code": "index",
-                        "category": "system",
-                        "label": "Native Demo",
-                        "link": "/admin/m/native_demo/",
-                        "weight": 999
-                    }
-                ]
-            }),
-            crate::rpc::RpcContext::default(),
-            state.clone()
-        ).await.map(|_| ()).map_err(|e| e.to_string())
+        state
+            .rpc_registry
+            .call(
+                "admin_menu",
+                "register_items",
+                serde_json::json!({
+                    "module": "native_demo",
+                    "items": [
+                        {
+                            "code": "index",
+                            "category": "system",
+                            "label": "Native Demo",
+                            "link": "/admin/m/native_demo/",
+                            "weight": 999
+                        }
+                    ]
+                }),
+                crate::rpc::RpcContext::default(),
+                state.clone(),
+            )
+            .await
+            .map(|_| ())
+            .map_err(|e| e.to_string())
     }
 
     async fn on_uninstall(&self, state: Arc<AppState>) -> Result<(), String> {
-        state.rpc_registry.call(
-            "admin_menu",
-            "unregister_module",
-            serde_json::json!({
-                "module": "native_demo",
-                "mode": "remove"
-            }),
-            crate::rpc::RpcContext::default(),
-            state.clone()
-        ).await.map(|_| ()).map_err(|e| e.to_string())
+        state
+            .rpc_registry
+            .call(
+                "admin_menu",
+                "unregister_module",
+                serde_json::json!({
+                    "module": "native_demo",
+                    "mode": "remove"
+                }),
+                crate::rpc::RpcContext::default(),
+                state.clone(),
+            )
+            .await
+            .map(|_| ())
+            .map_err(|e| e.to_string())
     }
 
     fn register_admin_routes(&self) -> Router<Arc<AppState>> {

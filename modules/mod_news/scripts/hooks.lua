@@ -44,14 +44,14 @@ function on_install(arg)
                 code = "list",
                 category = "news",
                 label = "admin_list",
-                link = "/admin/m/mod_news/list",
+                link = "/admin/news",
                 weight = 10
             },
             {
                 code = "add",
                 category = "news",
                 label = "admin_add",
-                link = "/admin/m/mod_news/add",
+                link = "/admin/news/add",
                 weight = 20
             }
         }
@@ -96,7 +96,7 @@ function admin_dispatch(arg)
                 data.cat_id = tonumber(data.cat_id)
             end
             db.insert("news", data)
-            return "<script>window.location.href='/admin/m/mod_news/list';</script>"
+            return { redirect = "/admin/news" }
         end
     end
 

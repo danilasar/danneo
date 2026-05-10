@@ -11,6 +11,18 @@ runtime_type = "lua"
 [entrypoints]
 hooks = "scripts/hooks.lua"
 
+[[admin_routes]]
+name = "list"
+method = "GET"
+path = "/news"
+handler = "list"
+
+[[admin_routes]]
+name = "add"
+method = "GET"
+path = "/news/add"
+handler = "add"
+
 [[frontend_routes]]
 name = "news_list"
 method = "GET"

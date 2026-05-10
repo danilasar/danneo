@@ -4,7 +4,6 @@ pub mod blocks;
 pub mod crud;
 pub mod dashboard;
 pub mod design;
-pub mod menu;
 pub mod middleware;
 pub mod modules;
 pub mod seo;
@@ -46,7 +45,7 @@ pub async fn render_admin_template(
         Ok(html) => Html(html).into_response(),
         Err(e) => {
             tracing::error!("Template rendering error for {}: {}", template_name, e);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+            (StatusCode::INTERNAL_SERVER_ERROR, format!("Template Error ({}): {}", template_name, e)).into_response()
         }
     }
 }
@@ -55,7 +54,22 @@ pub async fn prepare_admin_context(state: Arc<AppState>, context: &mut Context) 
     let settings = state.settings.read().await;
     context.insert("site_name", &settings.site_name);
 
-    // Collect module menus using AdminMenu module
-    let menu = state.admin_menu.build_menu(None, None).await;
-    context.insert("admin_menu", &menu.supercategories);
+    // Collect module menus using RPC
+    let ctx = crate::rpc::RpcContext::default();
+    let menu_res = state
+        .rpc_registry
+        .call(
+            "admin_menu",
+            "get_tree",
+            serde_json::json!({}),
+            ctx,
+            state.clone(),
+        )
+        .await;
+
+    if let Ok(menu_json) = menu_res {
+        if let Ok(menu) = serde_json::from_value::<crate::registry::AdminMenu>(menu_json) {
+            context.insert("admin_menu", &menu.supercategories);
+        }
+    }
 }

@@ -1,0 +1,40 @@
+{% extends "apanel/base.html" %}
+
+{% block content %}
+<div class="top_zag">Административное меню</div>
+
+<div class="content-box">
+    {% for supercat in menu_tree.supercategories %}
+    <table class="grid-table" style="width: 100%; border-collapse: collapse; margin-bottom: 18px;">
+        <caption style="text-align:left; padding:8px; font-weight:bold;">{{ supercat.label }} <code>{{ supercat.code }}</code></caption>
+        <thead>
+            <tr style="background-color: #f5f5f5; text-align: left;">
+                <th style="padding: 8px; border: 1px solid #ddd;">Категория</th>
+                <th style="padding: 8px; border: 1px solid #ddd;">Пункты</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for cat in supercat.categories %}
+            <tr>
+                <td style="padding: 8px; border: 1px solid #ddd; width: 220px;">
+                    <strong>{{ cat.label }}</strong><br>
+                    <code>{{ cat.code }}</code>
+                </td>
+                <td style="padding: 8px; border: 1px solid #ddd;">
+                    {% for item in cat.items %}
+                    <div style="margin-bottom: 4px;">
+                        <a href="{{ item.link }}">{{ item.label }}</a>
+                    </div>
+                    {% else %}
+                    <span style="color:#777;">Нет пунктов</span>
+                    {% endfor %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p>Меню пустое.</p>
+    {% endfor %}
+</div>
+{% endblock %}

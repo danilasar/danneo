@@ -11,7 +11,7 @@
         </form>
     </div>
 
-    <p>Доступные локальные пакеты из директорий <code>modules/</code> и <code>blocks/</code>.</p>
+    <p>Доступные локальные модули и kernel-модули. Блоки устанавливаются вместе со своим модулем.</p>
     <br>
     <table class="grid-table" style="width: 100%; border-collapse: collapse;">
         <thead>
@@ -64,7 +64,7 @@
             </tr>
             {% else %}
             <tr>
-                <td colspan="6" style="text-align: center; padding: 20px;">Нет доступных пакетов. Положите <code>module.toml</code> в <code>modules/</code> или <code>block.toml</code> в <code>blocks/</code></td>
+                <td colspan="6" style="text-align: center; padding: 20px;">Нет доступных пакетов. Положите <code>module.toml</code> в <code>modules/</code></td>
             </tr>
             {% endfor %}
         </tbody>

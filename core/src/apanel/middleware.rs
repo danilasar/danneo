@@ -60,3 +60,39 @@ pub async fn admin_acl_middleware(
     // Если путь не соответствует формату /admin/module, но мы в админке (например /admin/dashboard)
     Ok(next.run(request).await)
 }
+
+/// Middleware для проверки включен ли модуль в БД
+pub async fn module_enabled_middleware(
+    State(state): State<Arc<AppState>>,
+    request: Request,
+    next: Next,
+) -> Result<impl IntoResponse, StatusCode> {
+    let path = request.uri().path();
+    let parts: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
+
+    if parts.len() >= 2 && parts[0] == "admin" {
+        let module_code = parts[1];
+        
+        // Dashboard, Modules и другие системные роуты ядра пропускаем без проверки на включенность (они всегда включены)
+        if matches!(module_code, "dashboard" | "modules" | "login" | "crud") {
+             return Ok(next.run(request).await);
+        }
+
+        use crate::models::core_modules;
+        use sea_orm::{ColumnTrait, QueryFilter};
+        let is_enabled = core_modules::Entity::find()
+            .filter(core_modules::Column::Code.eq(module_code))
+            .filter(core_modules::Column::Enabled.eq(true))
+            .one(state.db.as_ref())
+            .await
+            .unwrap_or(None)
+            .is_some();
+
+        if !is_enabled {
+            tracing::warn!("Request to disabled module: {}", module_code);
+            return Err(StatusCode::NOT_FOUND);
+        }
+    }
+
+    Ok(next.run(request).await)
+}

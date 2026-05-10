@@ -35,23 +35,6 @@ impl MigrationTrait for Migration {
             )
             .await?;
 
-        // Создаем таблицу глобальных настроек (core_settings)
-        manager
-            .create_table(
-                Table::create()
-                    .table(CoreSettings::Table)
-                    .if_not_exists()
-                    .col(
-                        ColumnDef::new(CoreSettings::Key)
-                            .string()
-                            .not_null()
-                            .primary_key(),
-                    )
-                    .col(ColumnDef::new(CoreSettings::Value).json().not_null())
-                    .to_owned(),
-            )
-            .await?;
-
         // Вставляем дефолтного админа: admin / password
         let password_hash = bcrypt::hash("password", 4).unwrap();
         let insert_admin = Query::insert()
@@ -67,10 +50,6 @@ impl MigrationTrait for Migration {
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
         manager
-            .drop_table(Table::drop().table(CoreSettings::Table).to_owned())
-            .await?;
-
-        manager
             .drop_table(Table::drop().table(CoreAdmins::Table).to_owned())
             .await?;
 
@@ -84,11 +63,4 @@ enum CoreAdmins {
     Id,
     Login,
     PasswordHash,
-}
-
-#[derive(DeriveIden)]
-enum CoreSettings {
-    Table,
-    Key,
-    Value,
 }

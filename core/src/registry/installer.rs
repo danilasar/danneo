@@ -1,5 +1,5 @@
 use crate::registry::{PackageRegistry, ScriptEngine};
-use sea_orm::{ActiveModelTrait, DatabaseConnection, Set};
+use sea_orm::{ActiveModelTrait, DatabaseConnection, Set, PaginatorTrait};
 use std::sync::Arc;
 
 use crate::state::AppState;
@@ -46,7 +46,8 @@ impl PackageInstaller {
 
         {
             let mut routes_guard = self.routes.write().await;
-            routes_guard.routes.clear();
+            routes_guard.frontend_routes.clear();
+            routes_guard.admin_routes.clear();
         }
 
         let modules_guard = self.modules.read().await;
@@ -58,6 +59,60 @@ impl PackageInstaller {
                 self.state.clone(),
             )
             .await;
+    }
+
+    async fn install_module_blocks(&self, module_code: &str) -> Result<(), String> {
+        use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+
+        let block_manifests: Vec<_> = {
+            let registry = self.registry.read().await;
+            registry
+                .blocks
+                .values()
+                .filter(|manifest| manifest.block.module_code == module_code)
+                .cloned()
+                .collect()
+        };
+
+        for manifest in block_manifests {
+            let block_code = manifest.block.id.clone();
+            let existing = crate::models::core_block_definitions::Entity::find()
+                .filter(crate::models::core_block_definitions::Column::BlockCode.eq(&block_code))
+                .one(self.db.as_ref())
+                .await
+                .map_err(|e| e.to_string())?;
+
+            if existing.is_some() {
+                continue;
+            }
+
+            let block_def_model = crate::models::core_block_definitions::ActiveModel {
+                block_code: Set(block_code),
+                module_code: Set(Some(module_code.to_string())),
+                package_id: Set(0),
+                version: Set(manifest.block.version.clone()),
+                enabled: Set(true),
+                manifest: Set(serde_json::to_value(&manifest).map_err(|e| e.to_string())?),
+                settings_schema: Set(manifest
+                    .setting
+                    .clone()
+                    .map(|s| serde_json::to_value(s).unwrap_or(serde_json::json!([])))),
+                template_path: Set(manifest.block.template.clone()),
+                renderer_type: Set(manifest
+                    .block
+                    .renderer
+                    .clone()
+                    .unwrap_or_else(|| "lua".to_string())),
+                ..Default::default()
+            };
+
+            block_def_model
+                .insert(self.db.as_ref())
+                .await
+                .map_err(|e| e.to_string())?;
+        }
+
+        Ok(())
     }
 
     pub async fn install_from_staging(
@@ -108,6 +163,7 @@ impl PackageInstaller {
             }
             return Err(format!("Failed to move package: {}", e));
         }
+        self.registry.write().await.scan();
 
         // 2. Database update
         let db_result: Result<(), String> = async {
@@ -161,6 +217,8 @@ impl PackageInstaller {
                     manifest.package.version
                 );
             }
+
+            self.install_module_blocks(&module_code).await?;
 
             // 3. Entity handling
             if let Some(entry) = manifest.entrypoints.as_ref() {
@@ -230,7 +288,12 @@ impl PackageInstaller {
                     .await;
                 let _ = self
                     .script_engine
-                    .call_hook(&module_code, "on_install", script_rhai::Dynamic::UNIT, self.state.clone())
+                    .call_hook(
+                        &module_code,
+                        "on_install",
+                        script_rhai::Dynamic::UNIT,
+                        self.state.clone(),
+                    )
                     .await;
             }
         }
@@ -247,6 +310,12 @@ impl PackageInstaller {
     }
 
     pub async fn install(&self, package_id: &str) -> Result<(), String> {
+        // 1. Try Native first
+        if self.install_kernel_module(package_id).await.unwrap_or(false) {
+            return Ok(());
+        }
+
+        // 2. Try Registry (Lua)
         let manifest_data = {
             let registry = self.registry.read().await;
             if let Some(m) = registry.packages.get(package_id) {
@@ -318,7 +387,12 @@ impl PackageInstaller {
                             tracing::info!("Calling on_install hook for module {}", &module_code);
                             let result = self
                                 .script_engine
-                                .call_hook(&module_code, "on_install", script_rhai::Dynamic::UNIT, self.state.clone())
+                                .call_hook(
+                                    &module_code,
+                                    "on_install",
+                                    script_rhai::Dynamic::UNIT,
+                                    self.state.clone(),
+                                )
                                 .await;
                             if let Err(e) = result {
                                 tracing::error!(
@@ -351,53 +425,179 @@ impl PackageInstaller {
                             .map_err(|e| e.to_string())?;
                     }
                 }
+                self.install_module_blocks(&module_code).await?;
                 self.refresh_registries().await;
                 return Ok(());
             }
         }
 
-        // Handle blocks
-        let block_manifest = {
-            let registry = self.registry.read().await;
-            registry.blocks.get(package_id).cloned()
+        let registered_keys: Vec<_> = self.registry.read().await.packages.keys().cloned().collect();
+        Err(format!("Package {} not found in registry (available: {:?})", package_id, registered_keys))
+    }
+
+    pub async fn install_kernel_module(&self, module_code: &str) -> Result<bool, String> {
+        use crate::models::core_modules;
+        use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, IntoActiveModel, QueryFilter, Set};
+
+        let module = {
+            let modules = self.modules.read().await;
+            modules
+                .native_modules
+                .read()
+                .await
+                .get(module_code)
+                .cloned()
+        };
+        let Some(module) = module else {
+            return Ok(false);
         };
 
-        if let Some(manifest) = block_manifest {
-            let block_code = manifest.block.id.clone();
-            let module_code = if manifest.block.module_code.is_empty() {
-                None
-            } else {
-                Some(manifest.block.module_code.clone())
-            };
-            let block_def_model = crate::models::core_block_definitions::ActiveModel {
-                block_code: Set(block_code.clone()),
-                module_code: Set(module_code),
-                package_id: Set(0),
-                version: Set(manifest.block.version.clone()),
-                enabled: Set(true),
-                manifest: Set(serde_json::to_value(&manifest).map_err(|e| e.to_string())?),
-                settings_schema: Set(manifest
-                    .setting
-                    .clone()
-                    .map(|s| serde_json::to_value(s).unwrap_or(serde_json::json!([])))),
-                template_path: Set(manifest.block.template.clone()),
-                renderer_type: Set(manifest
-                    .block
-                    .renderer
-                    .clone()
-                    .unwrap_or_else(|| "lua".to_string())),
-                ..Default::default()
-            };
+        let now: chrono::DateTime<chrono::FixedOffset> = chrono::Utc::now().into();
+        let existing = core_modules::Entity::find()
+            .filter(core_modules::Column::Code.eq(module_code))
+            .one(self.db.as_ref())
+            .await
+            .map_err(|e| e.to_string())?;
 
-            if let Err(e) = block_def_model.insert(self.db.as_ref()).await {
-                tracing::error!("Failed to install block {}: {}", package_id, e);
-                return Err(e.to_string());
+        if let Some(model) = existing {
+            let mut active = model.into_active_model();
+            active.enabled = Set(true);
+            active.installed = Set(true);
+            active.updated_at = Set(now);
+            active
+                .update(self.db.as_ref())
+                .await
+                .map_err(|e| e.to_string())?;
+        } else {
+            core_modules::ActiveModel {
+                code: Set(module_code.to_string()),
+                name: Set(module_code.to_string()),
+                version: Set("kernel".to_string()),
+                package_id: Set(0),
+                package_path: Set("kernel".to_string()),
+                package_hash: Set("kernel".to_string()),
+                runtime_type: Set("native".to_string()),
+                enabled: Set(true),
+                installed: Set(true),
+                position: Set(0),
+                admin_enabled: Set(true),
+                sitemap_enabled: Set(false),
+                manifest: Set(serde_json::json!({
+                    "package": {
+                        "id": module_code,
+                        "type": "kernel",
+                        "version": "kernel",
+                        "name": module_code
+                    },
+                    "module": {
+                        "runtime_type": "native"
+                    }
+                })),
+                installed_at: Set(now),
+                updated_at: Set(now),
+                ..Default::default()
             }
-            self.refresh_registries().await;
-            return Ok(());
+            .insert(self.db.as_ref())
+            .await
+            .map_err(|e| e.to_string())?;
         }
 
-        Err(format!("Package {} not found in registry", package_id))
+        module.on_install(self.state.clone()).await?;
+        module.init(self.state.clone()).await?;
+        Ok(true)
+    }
+
+    pub async fn uninstall_kernel_module(&self, module_code: &str) -> Result<bool, String> {
+        use crate::models::core_modules;
+        use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+
+        let module = {
+            let modules = self.modules.read().await;
+            modules
+                .native_modules
+                .read()
+                .await
+                .get(module_code)
+                .cloned()
+        };
+        let Some(module) = module else {
+            return Ok(false);
+        };
+
+        module.on_uninstall(self.state.clone()).await?;
+        core_modules::Entity::delete_many()
+            .filter(core_modules::Column::Code.eq(module_code))
+            .exec(self.db.as_ref())
+            .await
+            .map_err(|e| e.to_string())?;
+        Ok(true)
+    }
+
+    pub async fn bootstrap(&self) -> Result<(), String> {
+        use crate::models::core_modules;
+        use sea_orm::{EntityTrait, ColumnTrait, QueryFilter};
+        
+        tracing::info!("Checking system bootstrap status...");
+
+        // 1. Core modules (always required)
+        let core_modules = vec![
+            "admin_menu".to_string(),
+            "settings".to_string(),
+            "design".to_string(),
+            "blocks".to_string(),
+            "seo".to_string(),
+            "security".to_string(),
+            "mod_menu".to_string(),
+        ];
+
+        // 2. Optional modules from bootstrap.toml
+        let mut modules_to_install = core_modules;
+        let bootstrap_path = std::path::Path::new("bootstrap.toml");
+        if bootstrap_path.exists() {
+            if let Ok(content) = std::fs::read_to_string(bootstrap_path) {
+                #[derive(serde::Deserialize)]
+                struct BootstrapConfig {
+                    bootstrap: BootstrapModules,
+                }
+                #[derive(serde::Deserialize)]
+                struct BootstrapModules {
+                    modules: Vec<String>,
+                }
+
+                if let Ok(config) = toml::from_str::<BootstrapConfig>(&content) {
+                    for m in config.bootstrap.modules {
+                        if !modules_to_install.contains(&m) {
+                            modules_to_install.push(m);
+                        }
+                    }
+                }
+            }
+        }
+
+        // 3. Install missing core modules
+        for module_id in modules_to_install {
+            let existing = core_modules::Entity::find()
+                .filter(core_modules::Column::Code.eq(&module_id))
+                .one(self.db.as_ref())
+                .await
+                .unwrap_or(None);
+
+            if existing.is_none() {
+                tracing::info!("Bootstrapping missing core module: {}", module_id);
+                if let Err(e) = self.install(&module_id).await {
+                    tracing::error!("Failed to bootstrap module {}: {}", module_id, e);
+                }
+            } else if let Some(m) = existing {
+                if !m.enabled {
+                    tracing::info!("Enabling core module: {}", module_id);
+                    let _ = self.modules.read().await.enable(&module_id).await;
+                    self.refresh_registries().await;
+                }
+            }
+        }
+
+        tracing::info!("Bootstrap check completed");
+        Ok(())
     }
 
     pub async fn uninstall(&self, package_id: &str) -> Result<(), String> {
@@ -406,7 +606,12 @@ impl PackageInstaller {
         // 1. Call on_uninstall hook
         let _ = self
             .script_engine
-            .call_hook(package_id, "on_uninstall", script_rhai::Dynamic::UNIT, self.state.clone())
+            .call_hook(
+                package_id,
+                "on_uninstall",
+                script_rhai::Dynamic::UNIT,
+                self.state.clone(),
+            )
             .await;
 
         // 2. Delete module record and clean up dynamic entities
@@ -434,27 +639,20 @@ impl PackageInstaller {
                     .await
                     .ok();
 
+                crate::models::core_block_definitions::Entity::delete_many()
+                    .filter(
+                        crate::models::core_block_definitions::Column::ModuleCode.eq(package_id),
+                    )
+                    .exec(self.db.as_ref())
+                    .await
+                    .ok();
+
                 // Rescan registries
                 self.refresh_registries().await;
                 tracing::info!(
                     "Module {} uninstalled and dynamic tables dropped",
                     package_id
                 );
-                return Ok(());
-            }
-        }
-
-        // Fallback to block uninstallation
-        let block_res = crate::models::core_block_definitions::Entity::delete_many()
-            .filter(crate::models::core_block_definitions::Column::BlockCode.eq(package_id))
-            .exec(self.db.as_ref())
-            .await;
-
-        if let Ok(res) = block_res {
-            if res.rows_affected > 0 {
-                // Rescan registries
-                self.refresh_registries().await;
-                tracing::info!("Block {} uninstalled successfully", package_id);
                 return Ok(());
             }
         }

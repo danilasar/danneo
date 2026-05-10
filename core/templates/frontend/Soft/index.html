@@ -1,87 +1,95 @@
 <!DOCTYPE html>
 <html lang="{{ langcode | default(value='ru') }}">
-
-<head>
-  <meta charset="{{ langcharset | default(value='UTF-8') }}" />
-  <title>{% if seo is defined %}{{ seo.title }}{% elif title is defined %}{{ title }}{% else %}{{ site_name }}{% endif %}</title>
-  <meta name="distribution" content="global" />
-  <meta name="generator" content="Danneo 2.0 (Rust)" />
-  <meta name="author" content="{{ site_name }}" />
-  <meta name="copyright" content="Copyright (c) {{ site_name }}" />
-  <meta name="keywords" content="{% if seo is defined %}{{ seo.keywords }}{% else %}{{ keywords | default(value='') }}{% endif %}" />
-  <meta name="description" content="{% if seo is defined %}{{ seo.description }}{% else %}{{ descript | default(value='') }}{% endif %}" />
-  <script src="/static/frontend/Soft/javascript/jquery.js"></script>
-  <script src="/static/frontend/Soft/javascript/jquery.colorbox.js"></script>
-  <script src="/static/frontend/Soft/javascript/menu.js"></script>
-  <script src="/static/frontend/Soft/javascript/soft.js"></script>
-  <link rel="stylesheet" href="/static/frontend/Soft/css/screen.css" />
-  <link rel="stylesheet" href="/static/frontend/Soft/css/menu.css" />
-  <link rel="stylesheet" href="/static/frontend/Soft/css/liquid-slider.css" />
-  <link rel="stylesheet" href="/static/frontend/Soft/javascript/colorbox/colorbox.css" />
-  <link rel="alternate" type="application/rss+xml" title="{{ site_name }}" href="/rss.php?dn=news" />
-  <link rel="icon" href="/favicon.ico" type="image/x-icon" />
-  <link rel="shortcut icon" href="/favicon.ico" type="image/x-icon" />
-  <script>$(function () { $.url = ''; });</script>
+<head>   
+<meta charset="{{ langcharset | default(value='UTF-8') }}" /> 
+<title>{% if seo is defined %}{{ seo.title }}{% elif title is defined %}{{ title }}{% else %}{{ site_name }}{% endif %}</title>
+<meta name="distribution" content="global" />
+<meta name="generator" content="Danneo 2.0 (Rust)" />
+<meta name="author" content="{{ site_name }}" />
+<meta name="copyright" content="Copyright (c) {{ site_name }}" />
+<meta name="keywords" content="{% if seo is defined %}{{ seo.keywords }}{% else %}{{ keywords | default(value='') }}{% endif %}" />
+<meta name="description" content="{% if seo is defined %}{{ seo.description }}{% else %}{{ descript | default(value='') }}{% endif %}" />
+<script src="/static/javascript/jquery.js"></script> 
+<script src="/static/javascript/jquery.colorbox.js"></script>
+<script src="/static/frontend/{{ site_temp }}/javascript/menu.js"></script>
+<script src="/static/frontend/{{ site_temp }}/javascript/soft.js"></script>
+<link rel="stylesheet" href="/static/frontend/{{ site_temp }}/css/screen.css" />
+<link rel="stylesheet" href="/static/frontend/{{ site_temp }}/css/menu.css" />  
+<link rel="stylesheet" href="/static/frontend/{{ site_temp }}/css/liquid-slider.css" /> 
+<link rel="stylesheet" href="/static/frontend/{{ site_temp }}/javascript/colorbox/colorbox.css" />
+<link rel="alternate" type="application/rss+xml" title="{{ site_name }}" href="/rss.php?dn=news" /> 
+<link rel="icon" href="/favicon.ico" type="image/x-icon" />
+<link rel="shortcut icon" href="/favicon.ico" type="image/x-icon" /> 
+<script>$(function(){ $.url = '{{ site_url }}'; });</script>
 </head>
-
 <body>
-  <div id="logo">
-    <div id="w1">
-      <h1><a href="/" title="{{ site_name }}">{{ site_name }}</a></h1>
+<div id="logo">
+ <div id="w1"><h1><a href="/" title="{{ site_name }}">{{ site_name }}</a></h1></div>
+</div>
+<div id="top-menu">
+  <div id="w2">
+    <ul class="nav">
+      {% for item in top_menu_items | default(value=[]) %}
+        <li><a href="{{ item.link }}" {% if item.target %}target="{{ item.target }}"{% endif %}>{{ item.title }}</a></li>
+      {% endfor %}
+    </ul>
+  </div>
+</div>
+<div id="wrap">
+<table id="table-main" cellspacing="0" cellpadding="0">
+ <tbody>
+  <tr>
+   <td id="table-left">
+    {{ positions.leftblock | default(value="") | safe }}
+   </td>
+   <td id="table-center">
+    {{ positions.promoblock | default(value="") | safe }}
+    {{ positions.topblock | default(value="") | safe }}
+    
+    {% if seo is defined and seo.breadcrumbs | length > 0 %}
+    <div class="site-title">
+      {% for item in seo.breadcrumbs %}
+        {% if loop.last %}
+          <span>{{ item.title }}</span>
+        {% else %}
+          <a href="{{ item.url }}">{{ item.title }}</a> &raquo;
+        {% endif %}
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="article">
+      {% if welcome_text %}
+        {{ welcome_text | safe }}
+      {% endif %}
+      {% block content %}{% endblock %}
+    </div>
+
+    {{ positions.botblock | default(value="") | safe }}
+   </td>
+   <td id="table-right">
+    {{ positions.rightblock | default(value="") | safe }}
+   </td>
+  </tr>
+ </tbody>
+</table>
+</div>
+<div id="bot-menu">
+  <div id="w3">
+    <div class="right">
+      {% for item in bot_menu_items | default(value=[]) %}
+        <a href="{{ item.link }}" {% if item.target %}target="{{ item.target }}"{% endif %}>{{ item.title }}</a>
+        {% if not loop.last %} | {% endif %}
+      {% endfor %}
     </div>
   </div>
-  <div id="top-menu">
-    <div id="w2">{{ top_menu | default(value='') | safe }}</div>
-  </div>
-  <div id="wrap">
-    <table id="table-main" cellspacing="0" cellpadding="0">
-      <tbody>
-        <tr>
-          <td id="table-left">
-            {{ positions.leftblock | default(value="") | safe }}
-          </td>
-          <td id="table-center">
-            {{ positions.promoblock | default(value="") | safe }}
-            {{ positions.topblock | default(value="") | safe }}
-            {% if seo is defined and seo.breadcrumbs | length > 0 %}
-            <div class="site-title">
-              {% for item in seo.breadcrumbs %}
-                {% if loop.last %}
-                  <span>{{ item.title }}</span>
-                {% else %}
-                  <a href="{{ item.url }}">{{ item.title }}</a> &raquo;
-                {% endif %}
-              {% endfor %}
-            </div>
-            {% else %}
-            {{ breadcrumbs | default(value='') | safe }}
-            {% endif %}
-
-            <div class="article">
-              {% block content %}{% endblock %}
-            </div>
-
-            {{ positions.botblock | default(value="") | safe }}
-          </td>
-          <td id="table-right">
-            {{ positions.rightblock | default(value="") | safe }}
-          </td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-  <div id="bot-menu">
-    <div id="w3">
-      <div class="right">{{ bot_menu | default(value='') | safe }}</div>
-    </div>
-  </div>
-  <table id="table-bot" cellspacing="0" cellpadding="0">
-    <tr>
-      <td class="va al">&copy; 2026 {{ site_name }}</td>
-      <td class="va al"></td>
-      <td class="va ar">Powered by <a href="/">Danneo 2.0</a></td>
-    </tr>
-  </table>
+</div>
+<table id="table-bot" cellspacing="0" cellpadding="0">
+ <tr>
+  <td class="va al">&copy; 2026 {{ site_name }}</td>
+  <td class="va al"></td>
+  <td class="va ar">Powered by <a href="/">Danneo 2.0</a></td>
+ </tr>
+</table>
 </body>
-
 </html>

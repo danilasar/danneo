@@ -6,6 +6,11 @@ use std::sync::Arc;
 
 pub mod admin_menu;
 pub mod native_demo;
+pub mod settings;
+pub mod seo;
+pub mod design;
+pub mod blocks;
+pub mod security;
 
 #[derive(Clone, Debug)]
 pub struct NativeBlockDefinition {
@@ -48,6 +53,16 @@ pub trait DanneoModule: Send + Sync {
         Router::new()
     }
 
+    /// Описание маршрутов для реестра (Frontend)
+    fn frontend_routes(&self) -> Vec<crate::registry::RouteDescriptor> {
+        Vec::new()
+    }
+
+    /// Описание маршрутов для реестра (Admin)
+    fn admin_routes(&self) -> Vec<crate::registry::RouteDescriptor> {
+        Vec::new()
+    }
+
     /// Блоки, предоставляемые native-модулем.
     fn block_definitions(&self) -> Vec<NativeBlockDefinition> {
         Vec::new()
@@ -76,7 +91,9 @@ pub trait DanneoModule: Send + Sync {
         _ctx: crate::rpc::RpcContext,
         _state: Arc<AppState>,
     ) -> Result<serde_json::Value, crate::rpc::RpcError> {
-        Err(crate::rpc::RpcError::NotFound("Native RPC not implemented".to_string()))
+        Err(crate::rpc::RpcError::NotFound(
+            "Native RPC not implemented".to_string(),
+        ))
     }
 }
 

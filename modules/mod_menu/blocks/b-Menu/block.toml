@@ -1,0 +1,13 @@
+[block]
+id = "b-Menu"
+module_code = "mod_menu"
+name = "Меню сайта"
+version = "1.1.0"
+template = "blocks/b-Menu/block.html"
+renderer = "lua"
+
+[[setting]]
+key = "position"
+type = "string"
+label = "Позиция (top/bottom)"
+default = "top"

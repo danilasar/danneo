@@ -1,8 +1,11 @@
 use async_trait::async_trait;
 use danneo_core::rpc::registry::{RpcHandler, RpcRegistry};
 use danneo_core::rpc::{RpcContext, RpcError, RpcMethodDescriptor, RpcVisibility};
+use danneo_core::state::AppState;
 use serde_json::json;
 use std::sync::Arc;
+
+mod common;
 
 struct MockNativeHandler;
 
@@ -13,6 +16,7 @@ impl RpcHandler for MockNativeHandler {
         method: &str,
         payload: serde_json::Value,
         _ctx: RpcContext,
+        _state: Arc<AppState>,
     ) -> Result<serde_json::Value, RpcError> {
         match method {
             "hello" => {
@@ -33,6 +37,7 @@ impl RpcHandler for MockNativeHandler {
 
 #[tokio::test]
 async fn test_rpc_native_call() {
+    let state = common::create_test_state().await;
     let registry = RpcRegistry::new();
     let handler = Arc::new(MockNativeHandler);
 
@@ -55,6 +60,7 @@ async fn test_rpc_native_call() {
             "hello",
             json!({ "name": "Rust" }),
             RpcContext::default(),
+            state.clone(),
         )
         .await;
 
@@ -64,9 +70,16 @@ async fn test_rpc_native_call() {
 
 #[tokio::test]
 async fn test_rpc_not_found() {
+    let state = common::create_test_state().await;
     let registry = RpcRegistry::new();
     let res = registry
-        .call("non_existent", "any", json!({}), RpcContext::default())
+        .call(
+            "non_existent",
+            "any",
+            json!({}),
+            RpcContext::default(),
+            state.clone(),
+        )
         .await;
 
     match res {
@@ -77,6 +90,7 @@ async fn test_rpc_not_found() {
 
 #[tokio::test]
 async fn test_rpc_max_depth() {
+    let state = common::create_test_state().await;
     let registry = Arc::new(RpcRegistry::new());
 
     struct RecursiveHandler {
@@ -90,6 +104,7 @@ async fn test_rpc_max_depth() {
             _method: &str,
             _payload: serde_json::Value,
             ctx: RpcContext,
+            state: Arc<AppState>,
         ) -> Result<serde_json::Value, RpcError> {
             self.reg
                 .call(
@@ -97,6 +112,7 @@ async fn test_rpc_max_depth() {
                     "loop",
                     json!({}),
                     ctx.next("rec_mod".to_string()),
+                    state,
                 )
                 .await
         }
@@ -108,7 +124,13 @@ async fn test_rpc_max_depth() {
     registry.register("rec_mod", handler, vec![]).await;
 
     let res = registry
-        .call("rec_mod", "loop", json!({}), RpcContext::default())
+        .call(
+            "rec_mod",
+            "loop",
+            json!({}),
+            RpcContext::default(),
+            state.clone(),
+        )
         .await;
 
     match res {

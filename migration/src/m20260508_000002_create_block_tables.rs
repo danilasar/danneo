@@ -74,14 +74,18 @@ impl MigrationTrait for Migration {
                             .default(0),
                     )
                     .col(ColumnDef::new(CoreBlocks::BlockTemp).string().null())
-                    .col(ColumnDef::new(CoreBlocks::BlockMods).json().null())
+                    .col(ColumnDef::new(CoreBlocks::BlockMods).json_binary().null())
                     .col(
                         ColumnDef::new(CoreBlocks::BlockAccess)
                             .string()
                             .not_null()
                             .default("all"),
                     )
-                    .col(ColumnDef::new(CoreBlocks::BlockSetting).json().null())
+                    .col(
+                        ColumnDef::new(CoreBlocks::BlockSetting)
+                            .json_binary()
+                            .null(),
+                    )
                     .to_owned(),
             )
             .await?;

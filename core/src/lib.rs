@@ -1,3 +1,6 @@
+#[macro_use]
+extern crate rust_i18n;
+
 pub mod acl;
 pub mod apanel;
 pub mod auth;
@@ -11,13 +14,9 @@ pub mod rpc;
 pub mod state;
 pub mod utils;
 
-use crate::module::DanneoModule;
 rust_i18n::i18n!("locales");
 
-pub fn init_i18n() {
-    rust_i18n::set_locale("ru");
-}
-
+use crate::module::DanneoModule;
 use axum::{
     Router,
     extract::State,
@@ -29,71 +28,21 @@ use std::sync::Arc;
 use tracing::info;
 
 pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
-    // Загрузка переменных окружения
     dotenvy::dotenv().ok();
+    let _ = tracing_subscriber::fmt::try_init();
 
-    // Инициализация логгирования
-    // tracing_subscriber::fmt::init(); // Переместим это в main.rs
+    let db_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+    let db = Database::connect(db_url).await?;
 
-    info!("Starting Danneo 2 Core...");
-
-    // Подключение к БД
-    let db_url = std::env::var("DATABASE_URL").map_err(|_| "DATABASE_URL must be set")?;
-    let db = Database::connect(&db_url).await?;
-
-    // Запуск миграций
-    use sea_orm_migration::MigratorTrait;
-    migration::Migrator::up(&db, None).await?;
-    info!("Database migrations completed.");
-
-    // Инициализация глобального состояния
     let app_state = Arc::new(
         state::AppState::new(db)
             .await
             .map_err(|e| format!("Failed to initialize AppState: {}", e))?,
     );
 
-    // Настройка роутера
-    let admin_routes = Router::new()
+    // 1. Настройка роутера админки
+    let mut admin_routes = Router::<Arc<state::AppState>>::new()
         .route("/dashboard", get(apanel::dashboard::render_dashboard))
-        .route("/settings", get(apanel::settings::show_settings))
-        .route("/settings/save", post(apanel::settings::save_settings))
-        .route("/seo", get(apanel::seo::show_settings))
-        .route("/seo/save", post(apanel::seo::save_settings))
-        .route("/seo/sitemap", get(apanel::seo::show_sitemap))
-        .route("/seo/sitemap/save", post(apanel::seo::save_sitemap))
-        .route("/seo/social", get(apanel::seo::show_social))
-        .route("/seo/social/save", post(apanel::seo::save_social))
-        .route("/seo/social/delete", post(apanel::seo::delete_social))
-        .route("/design", get(apanel::design::show_design))
-        .route("/design/save", post(apanel::design::save_file))
-        .route("/blocks/positions", get(apanel::blocks::list_positions))
-        .route(
-            "/blocks/positions/save",
-            post(apanel::blocks::save_position),
-        )
-        .route(
-            "/blocks/positions/delete",
-            post(apanel::blocks::delete_position),
-        )
-        .route("/blocks", get(apanel::blocks::list_blocks))
-        .route("/blocks/edit", get(apanel::blocks::edit_block))
-        .route("/blocks/save", post(apanel::blocks::save_block))
-        .route("/blocks/delete", post(apanel::blocks::delete_block))
-        .route("/menu", get(apanel::menu::list_groups))
-        .route("/menu/group/save", post(apanel::menu::save_group))
-        .route("/menu/group/delete", get(apanel::menu::delete_group))
-        .route("/menu/items", get(apanel::menu::list_items))
-        .route("/menu/item/save", post(apanel::menu::save_item))
-        .route("/menu/item/delete", get(apanel::menu::delete_item))
-        .route("/amanage", get(apanel::amanage::list_admins))
-        .route("/amanage/edit", get(apanel::amanage::edit_admin))
-        .route("/amanage/save", post(apanel::amanage::save_admin))
-        .route("/amanage/delete", post(apanel::amanage::delete_admin))
-        .route("/agroups", get(apanel::agroups::list_groups))
-        .route("/agroups/edit/:id", get(apanel::agroups::edit_group))
-        .route("/agroups/save", post(apanel::agroups::save_group))
-        .route("/agroups/delete/:id", post(apanel::agroups::delete_group))
         .route("/modules", get(apanel::modules::list_modules))
         .route("/modules/upload", post(apanel::modules::upload_module))
         .route(
@@ -110,11 +59,18 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
         .route(
             "/m/:module/*path",
             get(apanel::modules::dispatch_admin).post(apanel::modules::dispatch_admin),
-        )
-        .nest(
-            "/native-demo",
-            crate::module::native_demo::NativeDemoModule.register_admin_routes(),
-        )
+        );
+
+    // Mount Native Modules Routers statically
+    admin_routes = admin_routes
+        .nest("/settings", crate::module::settings::SettingsModule::new(app_state.db.clone()).register_admin_routes())
+        .nest("/seo", crate::module::seo::SeoModule.register_admin_routes())
+        .nest("/design", crate::module::design::DesignModule.register_admin_routes())
+        .nest("/blocks", crate::module::blocks::BlocksModule.register_admin_routes())
+        .nest("/security", crate::module::security::SecurityModule.register_admin_routes())
+        .nest("/menu_system", crate::module::admin_menu::AdminMenuModule::new(app_state.db.clone()).register_admin_routes());
+
+    admin_routes = admin_routes
         .route("/crud/:module/:entity/list", get(apanel::crud::list_page))
         .route("/crud/:module/:entity/edit", get(apanel::crud::edit_page))
         .route(
@@ -130,9 +86,16 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
             get(apanel::crud::delete_handle),
         )
         .route("/crud/:module/:entity/:action", get(apanel::crud::handle))
+        // Dynamic cleanup dispatcher as fallback for clean URLs (like /admin/menu from scripts)
+        .fallback(apanel::modules::dispatch_admin_clean)
+        // Order matters: first check if module is enabled, then check ACL
         .layer(axum::middleware::from_fn_with_state(
             app_state.clone(),
             apanel::middleware::admin_acl_middleware,
+        ))
+        .layer(axum::middleware::from_fn_with_state(
+            app_state.clone(),
+            apanel::middleware::module_enabled_middleware,
         ));
 
     let packages_dir = if std::path::Path::new("modules").exists() {
@@ -147,7 +110,8 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
         "./static"
     };
 
-    let app = Router::new()
+    // 2. Основной роутер приложения
+    let app = Router::<Arc<state::AppState>>::new()
         .route("/", get(root))
         .route("/admin/login", get(auth::show_login_page))
         .route("/api/admin/login", post(auth::admin_login))
@@ -160,7 +124,7 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
         .fallback(frontend::dispatch)
         .with_state(app_state);
 
-    // Запуск сервера
+    // 3. Запуск сервера
     let addr_str = std::env::var("SERVER_ADDR").unwrap_or_else(|_| "127.0.0.1:3000".to_string());
     let addr: SocketAddr = addr_str.parse()?;
 
@@ -173,39 +137,35 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
 
 async fn root(State(state): State<Arc<state::AppState>>) -> impl axum::response::IntoResponse {
     let mut context = tera::Context::new();
+    frontend::prepare_frontend_context(state.clone(), &mut context).await;
+
     let settings = state.settings.read().await;
-    context.insert("site_name", &settings.site_name);
-    let seo = utils::seo::SeoMeta::new(&settings.site_name)
-        .with_description(&settings.site_name)
-        .with_breadcrumb(&settings.site_name, "/");
-    seo.insert_into_context(&mut context);
+    let theme = settings.site_temp.clone();
 
-    // Предварительный рендеринг блоков
-    let block_ctx = Arc::new(crate::blocks::BlockContext {
-        db: state.db.clone(),
-        settings: state.settings.clone(),
-        state: state.clone(),
-    });
+    let welcome_html = format!(r#"
+        <style>
+            .welcome-container {{ padding: 40px 20px; text-align: center; }}
+            .welcome-container h1 {{ font-size: 2.5em; color: #1a73e8; margin-bottom: 20px; }}
+            .welcome-container p {{ font-size: 1.2em; color: #5f6368; max-width: 800px; margin: 0 auto 30px; line-height: 1.6; }}
+            .welcome-btn {{ display: inline-block; padding: 15px 30px; background: #1a73e8; color: white; text-decoration: none; border-radius: 5px; font-weight: bold; }}
+        </style>
+        <div class="welcome-container">
+            <h1>Danneo 2.0</h1>
+            <p>Добро пожаловать на ваш новый сайт <strong>{}</strong>, работающий на сверхбыстром движке Rust.</p>
+            <p>Это модернизированная версия легендарной Danneo CMS. Ваша система полностью настроена и готова к работе.</p>
+            <a href="/admin/dashboard" class="welcome-btn">Перейти в панель управления</a>
+        </div>
+    "#, settings.site_name);
 
-    let positions = state
-        .block_registry
-        .get_all_positions_html(block_ctx, &state.tera)
-        .await;
-    context.insert("positions", &positions);
+    context.insert("welcome_text", &welcome_html);
 
-    // Рендерим меню
-    let top_menu = crate::blocks::menu::render_menu(state.db.as_ref(), "top_menu").await;
-    let bot_menu = crate::blocks::menu::render_menu(state.db.as_ref(), "bot_menu").await;
-    context.insert("top_menu", &top_menu);
-    context.insert("bot_menu", &bot_menu);
-
-    let template_name = format!("frontend/{}/index.html", settings.site_temp);
-
+    let template_name = format!("frontend/{}/index.html", theme);
     match state.tera.render(&template_name, &context) {
         Ok(html) => axum::response::Html(html),
         Err(e) => {
-            tracing::error!("Template error: {}", e);
-            axum::response::Html(format!("<h1>Template Error</h1><pre>{}</pre>", e))
+            tracing::error!("Template error ({}): {}", template_name, e);
+            // Fallback to minimal
+            axum::response::Html(format!("<h1>System Error</h1><p>Theme template <b>{}</b> not found or invalid.</p><pre>{}</pre>", template_name, e))
         }
     }
 }

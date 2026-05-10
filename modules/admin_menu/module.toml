@@ -1,0 +1,12 @@
+[package]
+id = "admin_menu"
+name = "Admin Menu Service"
+version = "2.0.0"
+description = "System-wide administrative navigation"
+type = "module"
+
+[module]
+runtime_type = "native"
+
+[install]
+default_enabled = true

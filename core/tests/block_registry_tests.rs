@@ -1,39 +1,33 @@
 use danneo_core::blocks::BlockContext;
 use danneo_core::models::core_block_definitions;
-use danneo_core::registry::{BlockRegistry, ScriptEngine};
-use sea_orm::{ActiveModelTrait, Database, Set};
+use danneo_core::registry::BlockRegistry;
+use danneo_core::state::AppState;
+use sea_orm::{ActiveModelTrait, Set};
 use std::sync::Arc;
+
+mod common;
 
 async fn test_context() -> (
     Arc<sea_orm::DatabaseConnection>,
     Arc<BlockContext>,
     tera::Tera,
+    Arc<AppState>,
 ) {
-    let db = Arc::new(Database::connect("sqlite::memory:").await.unwrap());
-    use sea_orm_migration::MigratorTrait;
-    migration::Migrator::up(db.as_ref(), None).await.unwrap();
-
-    let settings = Arc::new(tokio::sync::RwLock::new(
-        danneo_core::state::GlobalSettings {
-            site_name: "Test Site".to_string(),
-            site_url: "https://example.test".to_string(),
-            site_temp: "default".to_string(),
-            ..Default::default()
-        },
-    ));
-
+    let state = common::create_test_state().await;
+    let db = state.db.clone();
     let ctx = Arc::new(BlockContext {
         db: db.clone(),
-        settings,
+        settings: state.settings.clone(),
+        state: state.clone(),
     });
 
-    (db, ctx, tera::Tera::default())
+    (db, ctx, tera::Tera::default(), state)
 }
 
 #[tokio::test]
 async fn lua_block_can_return_html() {
-    let (db, ctx, tera) = test_context().await;
-    let script_engine = Arc::new(ScriptEngine::new(db.clone()));
+    let (db, ctx, tera, state) = test_context().await;
+    let script_engine = state.script_engine.clone();
     let registry = BlockRegistry::new(db.clone(), script_engine.clone());
 
     script_engine
@@ -79,8 +73,8 @@ async fn lua_block_can_return_html() {
 
 #[tokio::test]
 async fn lua_block_can_return_template_response_like_routes() {
-    let (db, ctx, mut tera) = test_context().await;
-    let script_engine = Arc::new(ScriptEngine::new(db.clone()));
+    let (db, ctx, mut tera, state) = test_context().await;
+    let script_engine = state.script_engine.clone();
     let registry = BlockRegistry::new(db.clone(), script_engine.clone());
 
     tera.add_raw_template(
@@ -130,15 +124,20 @@ async fn lua_block_can_return_template_response_like_routes() {
         .await
         .unwrap();
 
-    assert_eq!(html, "<section>Test Site:Lua block:3</section>");
+    assert_eq!(html, "<section>Danneo 2:Lua block:3</section>");
 }
 
 #[tokio::test]
 async fn native_module_block_renders_through_same_registry() {
-    let (db, ctx, tera) = test_context().await;
-    let script_engine = Arc::new(ScriptEngine::new(db.clone()));
+    let (db, ctx, tera, state) = test_context().await;
+    let script_engine = state.script_engine.clone();
     let registry = BlockRegistry::new(db.clone(), script_engine);
-    registry.init().await;
+
+    let native_modules = {
+        let modules_guard = state.modules.read().await;
+        modules_guard.native_modules.read().await.clone()
+    };
+    registry.init(native_modules).await;
 
     let html = registry
         .render_block(

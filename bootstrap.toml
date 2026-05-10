@@ -1,0 +1,11 @@
+[bootstrap]
+modules = [
+    "admin_menu",
+    "settings",
+    "design",
+    "blocks",
+    "seo",
+    "security",
+    "mod_menu",
+    "mod_news"
+]

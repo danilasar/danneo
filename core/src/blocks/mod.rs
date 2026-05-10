@@ -4,8 +4,6 @@ use sea_orm::DatabaseConnection;
 use serde_json::Value;
 use std::sync::Arc;
 
-pub mod menu;
-
 /// Контекст для рендеринга блоков (без Tera, чтобы избежать циклов)
 pub struct BlockContext {
     pub db: Arc<DatabaseConnection>,

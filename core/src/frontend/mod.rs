@@ -5,6 +5,36 @@ use sea_orm::ConnectionTrait;
 use std::sync::Arc;
 use tera::Context;
 
+pub async fn prepare_frontend_context(state: Arc<AppState>, context: &mut Context) {
+    let settings = state.settings.read().await;
+    let theme = settings.site_temp.clone();
+    context.insert("site_name", &settings.site_name);
+    context.insert("site_url", &settings.site_url);
+    context.insert("site_temp", &theme);
+    context.insert("base_template", &format!("frontend/{}/index.html", theme));
+
+    // Render Blocks into "positions"
+    let block_ctx = Arc::new(crate::blocks::BlockContext {
+        db: state.db.clone(),
+        settings: state.settings.clone(),
+        state: state.clone(),
+    });
+    let rendered_blocks = state.block_registry.get_all_positions_html(block_ctx, &state.tera).await;
+    context.insert("positions", &rendered_blocks);
+
+    // Fetch site menu via RPC
+    let rpc_ctx = crate::rpc::RpcContext::default();
+    let top_menu_res = state.rpc_registry.call("mod_menu", "get_menu", serde_json::json!({"position": "top"}), rpc_ctx.clone(), state.clone()).await;
+    if let Ok(items) = top_menu_res {
+        context.insert("top_menu_items", &items);
+    }
+
+    let bot_menu_res = state.rpc_registry.call("mod_menu", "get_menu", serde_json::json!({"position": "bottom"}), rpc_ctx, state.clone()).await;
+    if let Ok(items) = bot_menu_res {
+        context.insert("bot_menu_items", &items);
+    }
+}
+
 pub async fn dispatch(
     State(state): State<Arc<AppState>>,
     method: axum::http::Method,
@@ -17,7 +47,7 @@ pub async fn dispatch(
         let mut found = None;
         let method_str = method.as_str().to_uppercase();
 
-        for (module_code, descriptor) in &routes.routes {
+        for (module_code, descriptor) in &routes.frontend_routes {
             if descriptor.method.to_uppercase() == method_str {
                 if let Some(p) = match_route(&descriptor.path, &path) {
                     found = Some((module_code.clone(), descriptor.clone()));
@@ -92,7 +122,6 @@ async fn render_script_route(
         .call_hook(module_code, "frontend_dispatch", dynamic_arg, state.clone())
         .await
     {
-
         Ok(res) => {
             if let Some(res_map) = res.clone().try_cast::<script_rhai::Map>() {
                 let template = res_map
@@ -106,10 +135,7 @@ async fn render_script_route(
                     .unwrap_or_else(|| script_rhai::Dynamic::from(script_rhai::Map::new()));
 
                 let mut ctx = Context::new();
-                let settings = state.settings.read().await;
-                ctx.insert("site_name", &settings.site_name);
-                ctx.insert("site_url", &settings.site_url);
-                ctx.insert("site_temp", &settings.site_temp);
+                prepare_frontend_context(state.clone(), &mut ctx).await;
 
                 if let Ok(ctx_json) =
                     script_rhai::serde::from_dynamic::<serde_json::Value>(&context_val)
@@ -176,10 +202,7 @@ async fn render_entity_list(
         let rows = db.query_all(stmt).await.unwrap();
 
         let mut context = Context::new();
-        let settings = state.settings.read().await;
-        context.insert("site_name", &settings.site_name);
-        context.insert("site_url", &settings.site_url);
-        context.insert("site_temp", &settings.site_temp);
+        prepare_frontend_context(state.clone(), &mut context).await;
 
         // Convert rows to values
         let mut data = Vec::new();
@@ -189,8 +212,6 @@ async fn render_entity_list(
                 let val: Result<Option<String>, _> = row.try_get("", &field.name);
                 if let Ok(Some(v)) = val {
                     item.insert(field.name.clone(), serde_json::Value::String(v));
-                } else {
-                    // Try as other types or just skip
                 }
             }
             data.push(serde_json::Value::Object(item));

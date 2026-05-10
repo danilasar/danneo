@@ -1,12 +1,15 @@
 use crate::models::core_modules;
+use crate::module::DanneoModule;
 use crate::state::AppState;
 use axum::{
-    extract::{Form, Multipart, State},
-    response::{IntoResponse, Redirect},
+    extract::{Form, Multipart, Path, State, Request},
+    http::{StatusCode, Method, Uri},
+    response::{IntoResponse, Redirect, Response, Html},
 };
-use sea_orm::EntityTrait;
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use tower::ServiceExt;
 
 #[derive(Serialize)]
 struct PackageViewModel {
@@ -20,6 +23,23 @@ struct PackageViewModel {
     entities: Vec<String>,
 }
 
+fn kernel_module_view(
+    module: &Arc<dyn DanneoModule>,
+    installed_map: &std::collections::HashMap<String, bool>,
+) -> PackageViewModel {
+    let id = module.name().to_string();
+    PackageViewModel {
+        id: id.clone(),
+        package_type: "kernel".to_string(),
+        name: id.clone(),
+        version: "kernel".to_string(),
+        description: Some("Native kernel module".to_string()),
+        is_installed: installed_map.contains_key(&id),
+        is_enabled: installed_map.get(&id).copied().unwrap_or(false),
+        entities: vec![],
+    }
+}
+
 pub async fn list_modules(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let mut context = tera::Context::new();
     crate::apanel::prepare_admin_context(state.clone(), &mut context).await;
@@ -29,23 +49,12 @@ pub async fn list_modules(State(state): State<Arc<AppState>>) -> impl IntoRespon
         Err(_) => vec![],
     };
 
-    let installed_blocks = match crate::models::core_block_definitions::Entity::find()
-        .all(state.db.as_ref())
-        .await
-    {
-        Ok(b) => b,
-        Err(_) => vec![],
-    };
-
     let mut installed_map = std::collections::HashMap::new();
     for m in installed_modules {
         installed_map.insert(m.code.clone(), m.enabled);
     }
-    for b in installed_blocks {
-        installed_map.insert(b.block_code.clone(), b.enabled);
-    }
 
-    // Fetch all entities to show in the list
+    // Fetch all entities
     use crate::models::core_module_entities;
     let all_entities = match core_module_entities::Entity::find()
         .all(state.db.as_ref())
@@ -64,58 +73,42 @@ pub async fn list_modules(State(state): State<Arc<AppState>>) -> impl IntoRespon
     }
 
     let mut packages_view = Vec::new();
+    let mut added_ids = std::collections::HashSet::new();
+
     {
         let package_registry = state.packages.read().await;
         for (_, manifest) in package_registry.packages.iter() {
-            let is_installed = installed_map.contains_key(&manifest.package.id);
-            let is_enabled = installed_map
-                .get(&manifest.package.id)
-                .copied()
-                .unwrap_or(false);
+            let id = &manifest.package.id;
+            let is_installed = installed_map.contains_key(id);
+            let is_enabled = installed_map.get(id).copied().unwrap_or(false);
 
             packages_view.push(PackageViewModel {
-                id: manifest.package.id.clone(),
+                id: id.clone(),
                 package_type: manifest.package.package_type.clone(),
                 name: manifest.package.name.clone(),
                 version: manifest.package.version.clone(),
                 description: manifest.package.description.clone(),
                 is_installed,
                 is_enabled,
-                entities: entity_map
-                    .get(&manifest.package.id)
-                    .cloned()
-                    .unwrap_or_default(),
+                entities: entity_map.get(id).cloned().unwrap_or_default(),
             });
+            added_ids.insert(id.clone());
         }
-        for (_, manifest) in package_registry.blocks.iter() {
-            let is_installed = installed_map.contains_key(&manifest.block.id);
-            let is_enabled = installed_map
-                .get(&manifest.block.id)
-                .copied()
-                .unwrap_or(false);
+    }
 
-            packages_view.push(PackageViewModel {
-                id: manifest.block.id.clone(),
-                package_type: "block".to_string(),
-                name: manifest.block.name.clone(),
-                version: manifest.block.version.clone(),
-                description: None,
-                is_installed,
-                is_enabled,
-                entities: vec![],
-            });
+    {
+        let modules = state.modules.read().await;
+        let native_modules = modules.native_modules.read().await;
+        for (name, module) in native_modules.iter() {
+            if !added_ids.contains(name) {
+                packages_view.push(kernel_module_view(module, &installed_map));
+            }
         }
     }
 
     context.insert("packages", &packages_view);
 
-    match state.tera.render("apanel/modules_list.html", &context) {
-        Ok(html) => axum::response::Html(html).into_response(),
-        Err(e) => {
-            tracing::error!("Template rendering error: {}", e);
-            "Internal Server Error".into_response()
-        }
-    }
+    crate::apanel::render_admin_template(state, "admin_menu/default/apanel/modules_list.html", context).await
 }
 
 #[derive(Serialize)]
@@ -174,7 +167,7 @@ pub async fn upload_module(
 
             match state
                 .tera
-                .render("apanel/module_install_preview.html", &context)
+                .render("admin_menu/default/apanel/module_install_preview.html", &context)
             {
                 Ok(html) => axum::response::Html(html).into_response(),
                 Err(e) => {
@@ -254,7 +247,9 @@ pub async fn uninstall_module(
         state.clone(),
     );
     if let Err(e) = installer.uninstall(&form.package_id).await {
-        tracing::error!("Uninstall error: {}", e);
+         if let Err(e2) = installer.uninstall_kernel_module(&form.package_id).await {
+             tracing::error!("Uninstall error: {} / {}", e, e2);
+         }
     }
     Redirect::to("/admin/modules")
 }
@@ -317,16 +312,103 @@ pub async fn disable_module(
     Redirect::to("/admin/modules")
 }
 
-pub async fn dispatch_admin(
+pub async fn dispatch_admin_clean(
     State(state): State<Arc<AppState>>,
-    axum::extract::Path((module, path)): axum::extract::Path<(String, String)>,
-    method: axum::http::Method,
-    axum::extract::Query(query): axum::extract::Query<std::collections::HashMap<String, String>>,
-    form: Option<axum::extract::Form<serde_json::Value>>,
-) -> impl IntoResponse {
+    req: Request,
+) -> Response {
+    let uri = req.uri().clone();
+    let method = req.method().clone();
+    let path = uri.path().trim_start_matches("/admin").trim_start_matches('/').to_string();
+    
+    let match_result = {
+        let routes = state.routes.read().await;
+        let mut found = None;
+        let method_str = method.as_str().to_uppercase();
+
+        for (module_code, descriptor) in &routes.admin_routes {
+            if descriptor.method.to_uppercase() == method_str {
+                if descriptor.path == format!("/{}", path) || descriptor.path == path {
+                     found = Some((module_code.clone(), descriptor.handler.clone()));
+                     break;
+                }
+            }
+        }
+        found
+    };
+
+    if let Some((module_code, handler_name)) = match_result {
+        if is_module_enabled(&state, &module_code).await {
+            dispatch_admin_internal(state, module_code, handler_name, req).await
+        } else {
+            (StatusCode::NOT_FOUND, "Module disabled").into_response()
+        }
+    } else {
+        let parts: Vec<&str> = path.split('/').collect();
+        if !parts.is_empty() {
+             let module_name = parts[0];
+             if is_module_enabled(&state, module_name).await {
+                 let sub_path = parts[1..].join("/");
+                 return dispatch_admin_internal(state, module_name.to_string(), sub_path, req).await;
+             }
+        }
+        (StatusCode::NOT_FOUND, "Admin path not found").into_response()
+    }
+}
+
+async fn is_module_enabled(state: &AppState, module_code: &str) -> bool {
+    core_modules::Entity::find()
+        .filter(core_modules::Column::Code.eq(module_code))
+        .filter(core_modules::Column::Enabled.eq(true))
+        .one(state.db.as_ref())
+        .await
+        .unwrap_or(None)
+        .is_some()
+}
+
+async fn dispatch_admin_internal(
+    state: Arc<AppState>,
+    module_name: String,
+    path: String,
+    req: Request,
+) -> Response {
+    let method = req.method().clone();
+    
+    // 1. Try Native first
+    let native_module = {
+        let modules_guard = state.modules.read().await;
+        modules_guard.native_modules.read().await.get(&module_name).cloned()
+    };
+
+    if let Some(native) = native_module {
+         let router = native.register_admin_routes();
+         let router = router.with_state(state.clone());
+         let sub_path = if path.starts_with('/') { path.clone() } else { format!("/{}", path) };
+         
+         let mut sub_req_builder = Request::builder().uri(sub_path).method(method.clone());
+         if let Some(headers) = sub_req_builder.headers_mut() {
+             for (key, value) in req.headers() {
+                 headers.insert(key.clone(), value.clone());
+             }
+         }
+         let sub_req = sub_req_builder.body(axum::body::Body::empty()).unwrap();
+            
+         match router.oneshot(sub_req).await {
+             Ok(res) => return res,
+             Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+         }
+    }
+
+    // 2. Try Lua
+    let query: std::collections::HashMap<String, String> = req.uri().query()
+        .map(|v| serde_urlencoded::from_str(v).unwrap_or_default())
+        .unwrap_or_default();
+
     let mut form_val = serde_json::json!({});
-    if let Some(f) = form {
-        form_val = f.0;
+    if method == Method::POST {
+        let body_bytes = axum::body::to_bytes(req.into_body(), 1024 * 1024).await.unwrap_or_default();
+        if let Ok(form) = serde_urlencoded::from_bytes::<serde_json::Value>(&body_bytes) {
+             form_val = form;
+        }
     }
 
     let arg = serde_json::json!({
@@ -340,12 +422,16 @@ pub async fn dispatch_admin(
 
     match state
         .script_engine
-        .call_hook(&module, "admin_dispatch", dynamic_arg, state.clone())
+        .call_hook(&module_name, "admin_dispatch", dynamic_arg, state.clone())
         .await
     {
-
         Ok(res) => {
             if let Some(res_map) = res.clone().try_cast::<script_rhai::Map>() {
+                // 1. Check for Redirect
+                if let Some(redirect) = res_map.get("redirect").and_then(|v| v.clone().into_string().ok()) {
+                    return Redirect::to(&redirect).into_response();
+                }
+
                 let template = res_map
                     .get("template")
                     .and_then(|v| v.clone().into_string().ok())
@@ -372,25 +458,37 @@ pub async fn dispatch_admin(
                 let full_template = if template.starts_with("apanel/") {
                     template
                 } else {
-                    crate::apanel::resolve_module_template(&state, &module, &template).await
+                    crate::apanel::resolve_module_template(&state, &module_name, &template).await
                 };
 
                 match state.tera.render(&full_template, &ctx) {
-                    Ok(html) => axum::response::Html(html).into_response(),
+                    Ok(html) => Html(html).into_response(),
                     Err(e) => {
                         tracing::error!("Template rendering error in dispatch_admin: {}", e);
-                        format!("<h1>Template Error</h1><pre>{}</pre>", e).into_response()
+                        Html(format!("<h1>Template Error</h1><pre>{}</pre>", e)).into_response()
                     }
                 }
             } else if let Some(s) = res.try_cast::<String>() {
-                axum::response::Html(s).into_response()
+                Html(s).into_response()
             } else {
                 "Invalid response from Lua admin_dispatch".into_response()
             }
         }
         Err(e) => {
-            tracing::error!("Lua admin_dispatch error for module {}: {}", module, e);
+            tracing::error!("Lua admin_dispatch error for module {}: {}", module_name, e);
             format!("<h1>Module Error</h1><pre>{}</pre>", e).into_response()
         }
+    }
+}
+
+pub async fn dispatch_admin(
+    state: State<Arc<AppState>>,
+    Path((module, path)): Path<(String, String)>,
+    req: Request,
+) -> Response {
+    if is_module_enabled(&state, &module).await {
+        dispatch_admin_internal(state.0, module, path, req).await
+    } else {
+        (StatusCode::NOT_FOUND, "Module disabled").into_response()
     }
 }

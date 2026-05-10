@@ -249,7 +249,8 @@ impl ScriptEngine {
                 }
                 Ok(VmState::Continue)
             },
-        );
+        )
+        .map_err(|e| ScriptError::Runtime(e.to_string()))?;
 
         DatabaseApi {
             db: self.db.clone(),

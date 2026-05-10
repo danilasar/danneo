@@ -10,7 +10,6 @@ pub struct BlockRegistry {
     pub db: Arc<DatabaseConnection>,
     pub script_engine: Arc<ScriptEngine>,
     renderers: HashMap<&'static str, Box<dyn DanneoBlock>>,
-    native_modules: HashMap<&'static str, Box<dyn DanneoModule>>,
 }
 
 impl BlockRegistry {
@@ -19,12 +18,9 @@ impl BlockRegistry {
             db,
             script_engine,
             renderers: HashMap::new(),
-            native_modules: HashMap::new(),
         };
         // Register native renderers
         registry.register(Box::new(crate::blocks::SampleBlock));
-        registry.register(Box::new(crate::blocks::menu::MenuBlock));
-        registry.register_native_module(Box::new(crate::module::native_demo::NativeDemoModule));
         registry
     }
 
@@ -32,11 +28,7 @@ impl BlockRegistry {
         self.renderers.insert(block.identifier(), block);
     }
 
-    pub fn register_native_module(&mut self, module: Box<dyn DanneoModule>) {
-        self.native_modules.insert(module.name(), module);
-    }
-
-    pub async fn init(&self) {
+    pub async fn init(&self, native_modules: HashMap<String, Arc<dyn DanneoModule>>) {
         use sea_orm::{ActiveModelTrait, Set};
 
         for &identifier in self.renderers.keys() {
@@ -69,7 +61,7 @@ impl BlockRegistry {
             }
         }
 
-        for module in self.native_modules.values() {
+        for module in native_modules.values() {
             for definition in module.block_definitions() {
                 let exists = core_block_definitions::Entity::find()
                     .filter(core_block_definitions::Column::BlockCode.eq(definition.block_code))
@@ -217,7 +209,9 @@ impl BlockRegistry {
         match definition.renderer_type.as_str() {
             "native" => {
                 if let Some(module_code) = definition.module_code.as_deref() {
-                    if let Some(module) = self.native_modules.get(module_code) {
+                    let modules_guard = ctx.state.modules.read().await;
+                    let native_modules = modules_guard.native_modules.read().await;
+                    if let Some(module) = native_modules.get(module_code) {
                         if let Some(html) = module
                             .render_block(block_code, ctx.clone(), settings.clone())
                             .await

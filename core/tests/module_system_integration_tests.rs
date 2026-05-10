@@ -3,12 +3,13 @@ use script_rhai::Dynamic;
 use sea_orm::Database;
 use std::sync::Arc;
 
+mod common;
+
 #[tokio::test]
 async fn test_module_db_api_isolation() {
-    let db = Database::connect("sqlite::memory:").await.unwrap();
-    let db_arc = Arc::new(db);
-
-    let engine = ScriptEngine::new(db_arc.clone());
+    let state = common::create_test_state().await;
+    let db_arc = state.db.clone();
+    let engine = state.script_engine.clone();
 
     // Script for module "mod1"
     let script1 = r#"
@@ -49,17 +50,17 @@ async fn test_module_db_api_isolation() {
 
     // Setup both
     let _ = engine
-        .call_hook("mod1", "setup", Dynamic::UNIT)
+        .call_hook("mod1", "setup", Dynamic::UNIT, state.clone())
         .await
         .unwrap();
     let _ = engine
-        .call_hook("mod2", "setup", Dynamic::UNIT)
+        .call_hook("mod2", "setup", Dynamic::UNIT, state.clone())
         .await
         .unwrap();
 
     // Verify mod1 sees its data
     let res1 = engine
-        .call_hook("mod1", "get_items", Dynamic::UNIT)
+        .call_hook("mod1", "get_items", Dynamic::UNIT, state.clone())
         .await
         .unwrap();
     let items1: serde_json::Value = script_rhai::serde::from_dynamic(&res1).unwrap();
@@ -67,7 +68,7 @@ async fn test_module_db_api_isolation() {
 
     // Verify mod2 sees its data
     let res2 = engine
-        .call_hook("mod2", "get_items", Dynamic::UNIT)
+        .call_hook("mod2", "get_items", Dynamic::UNIT, state.clone())
         .await
         .unwrap();
     let items2: serde_json::Value = script_rhai::serde::from_dynamic(&res2).unwrap();
@@ -91,9 +92,8 @@ async fn test_module_db_api_isolation() {
 
 #[tokio::test]
 async fn test_db_update_delete() {
-    let db = Database::connect("sqlite::memory:").await.unwrap();
-    let db_arc = Arc::new(db);
-    let engine = ScriptEngine::new(db_arc.clone());
+    let state = common::create_test_state().await;
+    let engine = state.script_engine.clone();
 
     let script = r#"
         function test(arg)
@@ -115,7 +115,7 @@ async fn test_db_update_delete() {
 
     engine.load_script_str("test_mod", script).await.unwrap();
     let res = engine
-        .call_hook("test_mod", "test", Dynamic::UNIT)
+        .call_hook("test_mod", "test", Dynamic::UNIT, state.clone())
         .await
         .unwrap();
     let arr = res.try_cast::<script_rhai::Array>().unwrap();

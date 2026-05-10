@@ -31,7 +31,7 @@ pub async fn show_settings(
     let themes = vec!["Soft", "Old", "Clear"];
     context.insert("themes", &themes);
 
-    crate::apanel::render_admin_template(state.clone(), "apanel/settings.html", context).await
+    crate::apanel::render_admin_template(state.clone(), "settings/default/apanel/settings.html", context).await
 }
 
 pub async fn save_settings(
@@ -64,8 +64,8 @@ pub async fn save_settings(
             .exec(db)
             .await
         {
-            tracing::error!("Failed to save setting {}: {}", key, e);
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            tracing::error!("Failed to save setting {}: {:?}", key, e);
+            return (StatusCode::INTERNAL_SERVER_ERROR, format!("DB Error: {}", e)).into_response();
         }
     }
 
@@ -128,7 +128,11 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(response.status(), StatusCode::OK);
+        if response.status() != StatusCode::OK {
+            let status = response.status();
+            let body = axum::body::to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
+            panic!("Expected 200, got {}. Body: {}", status, String::from_utf8_lossy(&body));
+        }
     }
 
     #[tokio::test]
@@ -163,7 +167,11 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(response.status(), StatusCode::SEE_OTHER);
+        if response.status() != StatusCode::SEE_OTHER {
+            let body = axum::body::to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
+            println!("Response body: {}", String::from_utf8_lossy(&body));
+            panic!("Expected 303, got {}", StatusCode::INTERNAL_SERVER_ERROR);
+        }
         assert_eq!(
             response.headers().get("location").unwrap(),
             "/admin/settings"

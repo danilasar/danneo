@@ -12,22 +12,38 @@ use std::sync::Arc;
 pub struct ModuleRegistry {
     pub db: Arc<DatabaseConnection>,
     pub admin_menus: Arc<tokio::sync::RwLock<HashMap<String, AdminMenu>>>,
-    pub admin_menu: Arc<crate::module::admin_menu::AdminMenuModule>,
     pub rpc_registry: Arc<crate::rpc::registry::RpcRegistry>,
+    pub native_modules:
+        Arc<tokio::sync::RwLock<HashMap<String, Arc<dyn crate::module::DanneoModule>>>>,
 }
 
 impl ModuleRegistry {
     pub fn new(
         db: Arc<DatabaseConnection>,
-        admin_menu: Arc<crate::module::admin_menu::AdminMenuModule>,
         rpc_registry: Arc<crate::rpc::registry::RpcRegistry>,
     ) -> Self {
         Self {
             db,
             admin_menus: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
-            admin_menu,
             rpc_registry,
+            native_modules: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
         }
+    }
+
+    pub async fn register_native(&self, module: Arc<dyn crate::module::DanneoModule>) {
+        let name = module.name().to_string();
+
+        // 1. Register in RPC
+        self.rpc_registry
+            .register(
+                &name,
+                Arc::new(crate::rpc::registry::NativeRpcHandler::new(module.clone())),
+                module.rpc_methods(),
+            )
+            .await;
+
+        // 2. Store instance
+        self.native_modules.write().await.insert(name, module);
     }
 
     pub async fn init(
@@ -56,16 +72,24 @@ impl ModuleRegistry {
                             if let Ok(manifest) =
                                 toml::from_str::<crate::registry::PackageManifest>(&content)
                             {
-                                // 1. Load embedded frontend routes
+                                // 1. Load frontend routes
                                 if let Some(descriptors) = manifest.frontend_routes {
                                     let mut routes_guard = routes.write().await;
                                     for desc in descriptors {
-                                        routes_guard.register(&module.code, desc);
+                                        routes_guard.register_frontend(&module.code, desc);
+                                    }
+                                }
+
+                                // 2. Load admin routes
+                                if let Some(descriptors) = manifest.admin_routes {
+                                    let mut routes_guard = routes.write().await;
+                                    for desc in descriptors {
+                                        routes_guard.register_admin(&module.code, desc);
                                     }
                                 }
 
                                 if let Some(entry) = manifest.entrypoints {
-                                    // 2. Load hooks
+                                    // 3. Load hooks
                                     if let Some(hooks_path) = entry.hooks {
                                         let full_path = module_path.join(hooks_path);
                                         if let Err(e) = script_engine
@@ -80,7 +104,7 @@ impl ModuleRegistry {
                                         }
                                     }
 
-                                    // 3. Load frontend routes from entrypoints (file)
+                                    // 4. Load frontend routes from entrypoints (file)
                                     if let Some(routes_path) = entry.frontend_routes {
                                         let full_path = module_path.join(routes_path);
                                         if let Ok(content) = std::fs::read_to_string(&full_path) {
@@ -91,13 +115,31 @@ impl ModuleRegistry {
                                             {
                                                 let mut routes_guard = routes.write().await;
                                                 for desc in descriptors {
-                                                    routes_guard.register(&module.code, desc);
+                                                    routes_guard
+                                                        .register_frontend(&module.code, desc);
                                                 }
                                             }
                                         }
                                     }
 
-                                    // 4. Load admin menu
+                                    // 5. Load admin routes from entrypoints (file)
+                                    if let Some(routes_path) = entry.admin_routes {
+                                        let full_path = module_path.join(routes_path);
+                                        if let Ok(content) = std::fs::read_to_string(&full_path) {
+                                            if let Ok(descriptors) =
+                                                serde_json::from_str::<Vec<RouteDescriptor>>(
+                                                    &content,
+                                                )
+                                            {
+                                                let mut routes_guard = routes.write().await;
+                                                for desc in descriptors {
+                                                    routes_guard.register_admin(&module.code, desc);
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    // 6. Load admin menu
                                     if let Some(menu_path) = entry.admin_menu {
                                         let full_path = module_path.join(menu_path);
                                         if let Ok(content) = std::fs::read_to_string(&full_path) {
@@ -106,19 +148,43 @@ impl ModuleRegistry {
                                             >(
                                                 &content
                                             ) {
-                                                let _ = self
-                                                    .admin_menu
-                                                    .process_contribution(
-                                                        &module.code,
-                                                        menu_manifest,
-                                                    )
-                                                    .await;
+                                                // Register via RPC
+                                                if let Some(cats) = menu_manifest.categories {
+                                                    for cat in cats {
+                                                        let _ = self
+                                                            .rpc_registry
+                                                            .call(
+                                                                "admin_menu",
+                                                                "ensure_category",
+                                                                serde_json::to_value(cat).unwrap(),
+                                                                crate::rpc::RpcContext::default(),
+                                                                state.clone(),
+                                                            )
+                                                            .await;
+                                                    }
+                                                }
+
+                                                if let Some(items) = menu_manifest.items {
+                                                    let _ = self
+                                                        .rpc_registry
+                                                        .call(
+                                                            "admin_menu",
+                                                            "register_items",
+                                                            serde_json::json!({
+                                                                "module": module.code,
+                                                                "items": items
+                                                            }),
+                                                            crate::rpc::RpcContext::default(),
+                                                            state.clone(),
+                                                        )
+                                                        .await;
+                                                }
                                             }
                                         }
                                     }
                                 }
 
-                                // 5. Register RPC methods
+                                // 7. Register RPC methods
                                 if let Some(rpc) = manifest.rpc {
                                     let runtime_type = manifest
                                         .module
@@ -142,6 +208,33 @@ impl ModuleRegistry {
             }
             Err(e) => {
                 tracing::error!("Failed to load active modules: {}", e);
+            }
+        }
+
+        // 2. Load active Native modules
+        {
+            let native_modules = self.native_modules.read().await;
+            
+            // Re-fetch enabled list to be sure
+            let enabled_modules: std::collections::HashSet<String> = core_modules::Entity::find()
+                .filter(core_modules::Column::Enabled.eq(true))
+                .all(self.db.as_ref())
+                .await
+                .unwrap_or_default()
+                .into_iter()
+                .map(|m| m.code)
+                .collect();
+
+            for (name, module) in native_modules.iter() {
+                if enabled_modules.contains(name) {
+                    let mut routes_guard = routes.write().await;
+                    for desc in module.frontend_routes() {
+                        routes_guard.register_frontend(name, desc);
+                    }
+                    for desc in module.admin_routes() {
+                        routes_guard.register_admin(name, desc);
+                    }
+                }
             }
         }
     }

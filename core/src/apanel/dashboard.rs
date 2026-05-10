@@ -10,5 +10,5 @@ pub async fn render_dashboard(
     let mut context = Context::new();
     context.insert("admin_id", &claims.admin_id);
 
-    crate::apanel::render_admin_template(state, "apanel/dashboard.html", context).await
+    crate::apanel::render_admin_template(state, "admin_menu/default/apanel/dashboard.html", context).await
 }
