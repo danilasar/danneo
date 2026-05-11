@@ -3,7 +3,7 @@
 {% block content %}
 <div class="section">
     <div style="margin-bottom:10px;">
-        <a href="/admin/amanage/edit" class="interface">Добавить нового администратора</a>
+        <a href="/admin/security/admins/edit" class="interface">Добавить нового администратора</a>
     </div>
 
     <table class="work">
@@ -31,11 +31,9 @@
                 </span>
             </td>
             <td class="ac">
-                <a href="/admin/amanage/edit?id={{ admin.id }}">Изменить</a>
+                <a href="/admin/security/admins/edit?id={{ admin.id }}">Изменить</a>
                 {% if admin.id != 1 %}
-                | <form action="/admin/amanage/delete?id={{ admin.id }}" method="POST" style="display:inline;" onsubmit="return confirm('Удалить администратора?')">
-                    <button type="submit" style="background:none; border:none; color:#c00; cursor:pointer; text-decoration:underline; padding:0; font-family:inherit; font-size:inherit;">Удалить</button>
-                </form>
+                | <a href="/admin/security/admins/delete?id={{ admin.id }}" class="confirm-delete" style="color:#c00;">Удалить</a>
                 {% endif %}
             </td>
         </tr>

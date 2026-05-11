@@ -1,6 +1,6 @@
 use crate::state::AppState;
 use axum::extract::State;
-use axum::response::{Html, IntoResponse};
+use axum::response::{Html, IntoResponse, Response};
 use sea_orm::ConnectionTrait;
 use std::sync::Arc;
 use tera::Context;
@@ -128,46 +128,7 @@ async fn render_script_route(
         .call_hook(module_code, "frontend_dispatch", dynamic_arg, state.clone())
         .await
     {
-        Ok(res) => {
-            if let Some(res_map) = res.clone().try_cast::<script_rhai::Map>() {
-                let template = res_map
-                    .get("template")
-                    .and_then(|v| v.clone().into_string().ok())
-                    .unwrap_or_else(|| "index.html".to_string());
-
-                let context_val = res_map
-                    .get("context")
-                    .cloned()
-                    .unwrap_or_else(|| script_rhai::Dynamic::from(script_rhai::Map::new()));
-
-                let mut ctx = Context::new();
-                prepare_frontend_context(state.clone(), &mut ctx).await;
-
-                if let Ok(ctx_json) =
-                    script_rhai::serde::from_dynamic::<serde_json::Value>(&context_val)
-                {
-                    if let Some(obj) = ctx_json.as_object() {
-                        for (k, v) in obj {
-                            ctx.insert(k, v);
-                        }
-                    }
-                }
-
-                let full_template =
-                    crate::apanel::resolve_module_template(&state, module_code, &template).await;
-                match state.tera.render(&full_template, &ctx) {
-                    Ok(html) => Html(html).into_response(),
-                    Err(e) => {
-                        tracing::error!("Template rendering error in frontend script: {}", e);
-                        Html(format!("<h1>Template Error</h1><pre>{}</pre>", e)).into_response()
-                    }
-                }
-            } else if let Some(s) = res.try_cast::<String>() {
-                Html(s).into_response()
-            } else {
-                "Invalid response from Lua frontend_dispatch".into_response()
-            }
-        }
+        Ok(res) => handle_script_response_internal(state, module_code, res).await,
         Err(e) => {
             tracing::error!(
                 "Lua frontend_dispatch error for module {}: {}",
@@ -176,6 +137,61 @@ async fn render_script_route(
             );
             format!("<h1>Module Error</h1><pre>{}</pre>", e).into_response()
         }
+    }
+}
+
+pub fn handle_script_response(res: script_rhai::Dynamic) -> Response {
+    // This is a bridge for async context if needed, but since we are in a handler, 
+    // we might need a sync version or handle it differently.
+    // Actually, let's make it more general.
+    if let Some(s) = res.clone().try_cast::<String>() {
+        Html(s).into_response()
+    } else {
+        // Fallback for complex responses that need state/templates
+        "Script returned complex object. Use standard template rendering.".into_response()
+    }
+}
+
+pub async fn handle_script_response_internal(
+    state: Arc<AppState>,
+    module_code: &str,
+    res: script_rhai::Dynamic,
+) -> Response {
+    if let Some(res_map) = res.clone().try_cast::<script_rhai::Map>() {
+        let template = res_map
+            .get("template")
+            .and_then(|v| v.clone().into_string().ok())
+            .unwrap_or_else(|| "index.html".to_string());
+
+        let context_val = res_map
+            .get("context")
+            .cloned()
+            .unwrap_or_else(|| script_rhai::Dynamic::from(script_rhai::Map::new()));
+
+        let mut ctx = Context::new();
+        prepare_frontend_context(state.clone(), &mut ctx).await;
+
+        if let Ok(ctx_json) = script_rhai::serde::from_dynamic::<serde_json::Value>(&context_val) {
+            if let Some(obj) = ctx_json.as_object() {
+                for (k, v) in obj {
+                    ctx.insert(k, v);
+                }
+            }
+        }
+
+        let full_template =
+            crate::apanel::resolve_module_template(&state, module_code, &template).await;
+        match state.tera.render(&full_template, &ctx) {
+            Ok(html) => Html(html).into_response(),
+            Err(e) => {
+                tracing::error!("Template rendering error in frontend script: {}", e);
+                Html(format!("<h1>Template Error</h1><pre>{}</pre>", e)).into_response()
+            }
+        }
+    } else if let Some(s) = res.try_cast::<String>() {
+        Html(s).into_response()
+    } else {
+        "Invalid response from Lua frontend_dispatch".into_response()
     }
 }
 

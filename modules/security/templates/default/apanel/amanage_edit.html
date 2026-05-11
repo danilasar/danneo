@@ -2,7 +2,7 @@
 
 {% block content %}
 <div class="section">
-    <form action="/admin/amanage/save" method="POST">
+    <form action="/admin/security/admins/save" method="POST">
         {% if admin %}
         <input type="hidden" name="id" value="{{ admin.id }}">
         {% endif %}
@@ -51,7 +51,7 @@
             <tr>
                 <td class="ac" colspan="2" style="padding:15px;">
                     <input type="submit" value="Сохранить данные" class="interface">
-                    <a href="/admin/amanage" class="interface" style="margin-left:10px;">Отмена</a>
+                    <a href="/admin/security/admins" class="interface" style="margin-left:10px;">Отмена</a>
                 </td>
             </tr>
         </table>

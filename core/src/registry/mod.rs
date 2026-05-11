@@ -1,5 +1,6 @@
 pub mod block_registry;
 pub mod dependency;
+pub mod function_registry;
 pub mod installer;
 pub mod manifest;
 pub mod module_registry;
@@ -9,6 +10,7 @@ pub mod script_engine;
 pub mod route_registry;
 
 pub use block_registry::*;
+pub use function_registry::*;
 pub use installer::*;
 pub use manifest::*;
 pub use module_registry::*;

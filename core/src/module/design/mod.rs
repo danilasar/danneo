@@ -1,9 +1,11 @@
 use crate::module::DanneoModule;
 use crate::state::AppState;
 use async_trait::async_trait;
-use axum::{Router, routing::get};
+use axum::{Router, routing::{get, post}};
 use std::sync::Arc;
 use sea_orm::DatabaseConnection;
+
+pub mod handlers;
 
 pub struct DesignModule;
 
@@ -43,7 +45,9 @@ impl DanneoModule for DesignModule {
     }
 
     fn register_admin_routes(&self) -> Router<Arc<AppState>> {
-        Router::new().route("/", get(crate::apanel::design::show_design))
+        Router::new()
+            .route("/", get(handlers::show_design))
+            .route("/save", post(handlers::save_file))
     }
 }
 

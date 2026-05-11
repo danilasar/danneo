@@ -24,16 +24,20 @@ pub trait DanneoModule: Send + Sync {
 
     fn register_routes(&self) -> axum::Router<Arc<AppState>> { axum::Router::new() }
     fn register_admin_routes(&self) -> axum::Router<Arc<AppState>> { axum::Router::new() }
-    fn admin_routes(&self) -> Vec<crate::registry::RouteDescriptor> { vec![] }
+    fn register_admin_middleware(&self, router: axum::Router<Arc<AppState>>, _state: Arc<AppState>) -> axum::Router<Arc<AppState>> { router }
     
     fn block_definitions(&self) -> Vec<NativeBlockDefinition> { vec![] }
-    fn frontend_routes(&self) -> Vec<crate::registry::RouteDescriptor> { vec![] }
     async fn render_block(
         &self,
         _block_code: &str,
         _ctx: Arc<crate::blocks::BlockContext>,
         _settings: Arc<tokio::sync::RwLock<crate::state::GlobalSettings>>,
     ) -> Option<String> { None }
+}
+
+#[derive(Clone, Debug)]
+pub struct ModuleInfo {
+    pub code: String,
 }
 
 #[derive(Clone, Debug)]
@@ -66,8 +70,10 @@ macro_rules! register_native_module {
 
 pub mod admin_menu;
 pub mod blocks;
+pub mod casbin;
 pub mod design;
 pub mod image;
+pub mod lua_adapter;
 pub mod native_demo;
 pub mod security;
 pub mod seo;

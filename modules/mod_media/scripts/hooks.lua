@@ -19,17 +19,22 @@ function on_uninstall(arg)
     rpc.call("admin_menu", "unregister_module", { module = "mod_media" })
 end
 
-function admin_dispatch(arg)
-    local path = arg.path
+function register_admin_routes()
+    local r = danneo.Router.new()
+    r:get("/", "admin_dispatch")
+    r:post("/upload", "admin_dispatch")
+    return r
+end
 
-    if path == "upload_page" or path == "" then
+function admin_dispatch(arg)
+    if arg.uri == "/" or arg.uri == "" then
         return {
             template = "apanel/upload.html",
             context = {}
         }
     end
 
-    if path == "do_upload" then
+    if arg.uri == "/upload" then
         -- We expect files metadata in arg.files
         if #arg.files == 0 then
              return {

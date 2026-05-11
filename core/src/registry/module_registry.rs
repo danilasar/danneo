@@ -1,5 +1,6 @@
 use crate::models::core_modules;
-use crate::registry::{AdminMenu, RouteDescriptor, RouteRegistry, ScriptEngine};
+use crate::registry::{AdminMenu, RouteRegistry, ScriptEngine};
+use crate::module::DanneoModule;
 use async_trait::async_trait;
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, IntoActiveModel, QueryFilter,
@@ -104,40 +105,7 @@ impl ModuleRegistry {
                                         }
                                     }
 
-                                    // 4. Load frontend routes from entrypoints (file)
-                                    if let Some(routes_path) = entry.frontend_routes {
-                                        let full_path = module_path.join(routes_path);
-                                        if let Ok(content) = std::fs::read_to_string(&full_path) {
-                                            if let Ok(descriptors) =
-                                                serde_json::from_str::<Vec<RouteDescriptor>>(
-                                                    &content,
-                                                )
-                                            {
-                                                let mut routes_guard = routes.write().await;
-                                                for desc in descriptors {
-                                                    routes_guard
-                                                        .register_frontend(&module.code, desc);
-                                                }
-                                            }
-                                        }
-                                    }
-
-                                    // 5. Load admin routes from entrypoints (file)
-                                    if let Some(routes_path) = entry.admin_routes {
-                                        let full_path = module_path.join(routes_path);
-                                        if let Ok(content) = std::fs::read_to_string(&full_path) {
-                                            if let Ok(descriptors) =
-                                                serde_json::from_str::<Vec<RouteDescriptor>>(
-                                                    &content,
-                                                )
-                                            {
-                                                let mut routes_guard = routes.write().await;
-                                                for desc in descriptors {
-                                                    routes_guard.register_admin(&module.code, desc);
-                                                }
-                                            }
-                                        }
-                                    }
+                                    // (JSON-based routing removed in favor of Axum-style code routing)
 
                                     // 6. Load admin menu
                                     if let Some(menu_path) = entry.admin_menu {
@@ -201,6 +169,21 @@ impl ModuleRegistry {
                                             .await;
                                     }
                                 }
+
+                                // 8. Register as DanneoModule adapter
+                                let runtime_type = manifest
+                                    .module
+                                    .as_ref()
+                                    .map(|m| m.runtime_type.as_str())
+                                    .unwrap_or("lua");
+                                if runtime_type == "lua" {
+                                    let adapter = crate::module::lua_adapter::build_lua_module_adapter(
+                                        module.code.clone(),
+                                        script_engine.clone(),
+                                        state.clone(),
+                                    ).await;
+                                    self.native_modules.write().await.insert(module.code.clone(), adapter as Arc<dyn DanneoModule>);
+                                }
                             }
                         }
                     }
@@ -225,15 +208,10 @@ impl ModuleRegistry {
                 .map(|m| m.code)
                 .collect();
 
-            for (name, module) in native_modules.iter() {
+            for (name, _module) in native_modules.iter() {
                 if enabled_modules.contains(name) {
-                    let mut routes_guard = routes.write().await;
-                    for desc in module.frontend_routes() {
-                        routes_guard.register_frontend(name, desc);
-                    }
-                    for desc in module.admin_routes() {
-                        routes_guard.register_admin(name, desc);
-                    }
+                    let _routes_guard = routes.write().await;
+                    // (Removed legacy admin_routes and frontend_routes loops as we now use register_admin_routes/register_routes)
                 }
             }
         }

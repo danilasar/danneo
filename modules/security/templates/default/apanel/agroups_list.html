@@ -3,7 +3,7 @@
 {% block content %}
 <div class="section">
     <div style="margin-bottom:10px;">
-        <a href="/admin/agroups/edit/0" class="interface">Добавить новую группу</a>
+        <a href="/admin/security/groups/edit?id=0" class="interface">Добавить новую группу</a>
     </div>
 
     <table class="work">
@@ -20,10 +20,8 @@
             <td class="al"><strong>{{ group.name }}</strong></td>
             <td class="ac">{{ group.level }}</td>
             <td class="ac">
-                <a href="/admin/agroups/edit/{{ group.id }}">Изменить</a> |
-                <form action="/admin/agroups/delete/{{ group.id }}" method="POST" style="display:inline;" onsubmit="return confirm('Удалить группу?')">
-                    <button type="submit" style="background:none; border:none; color:#c00; cursor:pointer; text-decoration:underline; padding:0; font-family:inherit; font-size:inherit;">Удалить</button>
-                </form>
+                <a href="/admin/security/groups/edit?id={{ group.id }}">Изменить</a> |
+                <a href="/admin/security/groups/delete?id={{ group.id }}" class="confirm-delete" style="color:#c00;">Удалить</a>
             </td>
         </tr>
         {% endfor %}

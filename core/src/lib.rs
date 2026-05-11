@@ -6,6 +6,7 @@ pub use inventory;
 pub mod acl;
 pub mod apanel;
 pub mod auth;
+pub mod cli;
 pub mod blocks;
 pub mod crud;
 pub mod frontend;
@@ -42,8 +43,8 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
             .map_err(|e| format!("Failed to initialize AppState: {}", e))?,
     );
 
-    // 1. Настройка роутера админки
-    let mut admin_routes = Router::<Arc<state::AppState>>::new()
+    // 1. Настройка роутера админки (Admin Panel)
+    let mut admin_routes = Router::new()
         .route("/dashboard", get(apanel::dashboard::render_dashboard))
         .route("/modules", get(apanel::modules::list_modules))
         .route("/modules/upload", post(apanel::modules::upload_module))
@@ -57,20 +58,26 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
             post(apanel::modules::uninstall_module),
         )
         .route("/modules/enable", post(apanel::modules::enable_module))
-        .route("/modules/disable", post(apanel::modules::disable_module))
-        .route(
-            "/m/:module/*path",
-            get(apanel::modules::dispatch_admin).post(apanel::modules::dispatch_admin),
-        );
+        .route("/modules/disable", post(apanel::modules::disable_module));
 
-    // Mount Native Modules Routers statically
-    admin_routes = admin_routes
-        .nest("/settings", crate::module::settings::SettingsModule::new(app_state.db.clone()).register_admin_routes())
-        .nest("/seo", crate::module::seo::SeoModule.register_admin_routes())
-        .nest("/design", crate::module::design::DesignModule.register_admin_routes())
-        .nest("/blocks", crate::module::blocks::BlocksModule.register_admin_routes())
-        .nest("/security", crate::module::security::SecurityModule.register_admin_routes())
-        .nest("/menu_system", crate::module::admin_menu::AdminMenuModule::new(app_state.db.clone()).register_admin_routes());
+    // Dynamic Discovery of Admin Routes from all modules (Native & Lua)
+    {
+        let modules_guard = app_state.modules.read().await;
+        let active_modules = modules_guard.native_modules.read().await;
+        for (name, module) in active_modules.iter() {
+            let path = format!("/{}", name);
+            let name_clone = name.clone();
+            let module_router = module.register_admin_routes()
+                .layer(axum::middleware::from_fn(move |mut req: axum::extract::Request, next: axum::middleware::Next| {
+                    let code = name_clone.clone();
+                    async move {
+                        req.extensions_mut().insert(crate::module::ModuleInfo { code });
+                        next.run(req).await
+                    }
+                }));
+            admin_routes = admin_routes.nest(&path, module_router);
+        }
+    }
 
     admin_routes = admin_routes
         .route("/crud/:module/:entity/list", get(apanel::crud::list_page))
@@ -88,17 +95,42 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
             get(apanel::crud::delete_handle),
         )
         .route("/crud/:module/:entity/:action", get(apanel::crud::handle))
-        // Dynamic cleanup dispatcher as fallback for clean URLs (like /admin/menu from scripts)
-        .fallback(apanel::modules::dispatch_admin_clean)
-        // Order matters: first check if module is enabled, then check ACL
-        .layer(axum::middleware::from_fn_with_state(
-            app_state.clone(),
-            apanel::middleware::admin_acl_middleware,
-        ))
-        .layer(axum::middleware::from_fn_with_state(
-            app_state.clone(),
-            apanel::middleware::module_enabled_middleware,
-        ));
+        // Fallback for clean URLs (legacy)
+        .fallback(apanel::modules::dispatch_admin_clean);
+
+    // Apply Modular Middleware
+    {
+        let modules_guard = app_state.modules.read().await;
+        let active_modules = modules_guard.native_modules.read().await;
+        for module in active_modules.values() {
+            admin_routes = module.register_admin_middleware(admin_routes, app_state.clone());
+        }
+    }
+
+    // Common middleware (first check if module is enabled)
+    admin_routes = admin_routes.layer(axum::middleware::from_fn_with_state(
+        app_state.clone(),
+        apanel::middleware::module_enabled_middleware,
+    ));
+
+    // Dynamic Discovery of Site Routes from all modules
+    let mut site_routes = Router::new();
+    {
+        let modules_guard = app_state.modules.read().await;
+        let active_modules = modules_guard.native_modules.read().await;
+        for (name, module) in active_modules.iter() {
+            let name_clone = name.clone();
+            let module_router = module.register_routes()
+                .layer(axum::middleware::from_fn(move |mut req: axum::extract::Request, next: axum::middleware::Next| {
+                    let code = name_clone.clone();
+                    async move {
+                        req.extensions_mut().insert(crate::module::ModuleInfo { code });
+                        next.run(req).await
+                    }
+                }));
+            site_routes = site_routes.merge(module_router);
+        }
+    }
 
     let packages_dir = if std::path::Path::new("modules").exists() {
         "modules"
@@ -115,8 +147,7 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
     // 2. Основной роутер приложения
     let app = Router::<Arc<state::AppState>>::new()
         .route("/", get(root))
-        .route("/admin/login", get(auth::show_login_page))
-        .route("/api/admin/login", post(auth::admin_login))
+        .merge(site_routes)
         .nest("/admin", admin_routes)
         .nest_service(
             "/static/m",
@@ -166,7 +197,6 @@ async fn root(State(state): State<Arc<state::AppState>>) -> impl axum::response:
         Ok(html) => axum::response::Html(html),
         Err(e) => {
             tracing::error!("Template error ({}): {}", template_name, e);
-            // Fallback to minimal
             axum::response::Html(format!("<h1>System Error</h1><p>Theme template <b>{}</b> not found or invalid.</p><pre>{}</pre>", template_name, e))
         }
     }

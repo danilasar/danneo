@@ -21,7 +21,6 @@ pub async fn show_design(_claims: Claims, State(state): State<Arc<AppState>>) ->
     let mut context = Context::new();
     context.insert("site_temp", theme);
 
-    // Читаем index.html
     let index_path = format!("core/templates/frontend/{}/index.html", theme);
     let index_content = std::fs::read_to_string(&index_path)
         .unwrap_or_else(|_| "<!-- Шаблон не найден -->".to_string());
@@ -31,7 +30,6 @@ pub async fn show_design(_claims: Claims, State(state): State<Arc<AppState>>) ->
     context.insert("index_html_content_json", &index_json);
     context.insert("initial_content", &index_content);
 
-    // Читаем screen.css
     let css_path = format!("core/static/frontend/{}/css/screen.css", theme);
     let css_content =
         std::fs::read_to_string(&css_path).unwrap_or_else(|_| "/* CSS не найден */".to_string());
@@ -48,7 +46,6 @@ pub async fn save_file(
     State(state): State<Arc<AppState>>,
     Form(form): Form<SaveFileForm>,
 ) -> impl IntoResponse {
-    // 1. Защита от Path Traversal и ограничение списка файлов
     if form.file_name.contains("..") || form.file_name.starts_with('/') {
         return (StatusCode::BAD_REQUEST, "Invalid file name").into_response();
     }
@@ -60,7 +57,6 @@ pub async fn save_file(
     let settings = state.settings.read().await;
     let theme = &settings.site_temp;
 
-    // 2. Определяем базовый путь
     let base_path = if form.file_name.ends_with(".html") {
         format!("core/templates/frontend/{}", theme)
     } else {
@@ -69,7 +65,6 @@ pub async fn save_file(
 
     let full_path = std::path::Path::new(&base_path).join(&form.file_name);
 
-    // 3. Сохраняем
     if let Err(e) = std::fs::write(full_path, &form.content) {
         tracing::error!("Failed to save file: {}", e);
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();

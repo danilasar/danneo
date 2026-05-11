@@ -124,7 +124,7 @@ async fn lua_block_can_return_template_response_like_routes() {
         .await
         .unwrap();
 
-    assert_eq!(html, "<section>Danneo 2:Lua block:3</section>");
+    assert_eq!(html, "<section>Danneo:Lua block:3</section>");
 }
 
 #[tokio::test]

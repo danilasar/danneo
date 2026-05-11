@@ -120,8 +120,11 @@ async fn test_middleware_blocks_disabled_module() {
         ));
 
     // 1. Request to module not in DB -> should be 404
+    let mut req = Request::builder().uri("/test_mod/foo").body(Body::empty()).unwrap();
+    req.extensions_mut().insert(danneo_core::module::ModuleInfo { code: "test_mod".to_string() });
+    
     let response = admin_routes.clone()
-        .oneshot(Request::builder().uri("/test_mod/foo").body(Body::empty()).unwrap())
+        .oneshot(req)
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
@@ -146,8 +149,11 @@ async fn test_middleware_blocks_disabled_module() {
     }.insert(state.db.as_ref()).await.unwrap();
 
     // 3. Request again -> should be 200
+    let mut req2 = Request::builder().uri("/test_mod/foo").body(Body::empty()).unwrap();
+    req2.extensions_mut().insert(danneo_core::module::ModuleInfo { code: "test_mod".to_string() });
+
     let response = admin_routes
-        .oneshot(Request::builder().uri("/test_mod/foo").body(Body::empty()).unwrap())
+        .oneshot(req2)
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);

@@ -82,9 +82,20 @@ function rpc_get_menu(payload, ctx)
     return db.select("core_menu_items", {"title", "link", "target", "css"}, { group_id = groups[1].id })
 end
 
+function register_admin_routes()
+    local r = danneo.Router.new()
+    r:get("/", "admin_dispatch")
+    r:get("/items", "admin_dispatch")
+    r:post("/group/save", "admin_dispatch")
+    r:get("/group/delete", "admin_dispatch")
+    r:post("/item/save", "admin_dispatch")
+    r:get("/item/delete", "admin_dispatch")
+    return r
+end
+
 function admin_dispatch(arg)
     -- Main list of groups
-    if arg.path == "list" or arg.path == "" then
+    if arg.uri == "/" or arg.uri == "" then
         local groups = db.select("core_menu_groups", {"id", "code", "title"})
         return {
             template = "apanel/menu_list.html",
@@ -93,8 +104,8 @@ function admin_dispatch(arg)
     end
 
     -- List items in a group
-    if arg.path == "items" then
-        local group_id = tonumber(arg.query.group_id)
+    if arg.uri == "/items" then
+        local group_id = tonumber(arg.params.group_id or arg.query.group_id)
         local groups = db.select("core_menu_groups", {"id", "title"}, { id = group_id })
         if #groups == 0 then return "Group not found" end
         
@@ -109,11 +120,11 @@ function admin_dispatch(arg)
     end
 
     -- Save group
-    if arg.path == "group/save" then
+    if arg.uri == "/group/save" then
         local id = tonumber(arg.form.id)
         local data = { code = arg.form.code, title = arg.form.title }
         if id and id > 0 then
-            db.update("core_menu_groups", data, { id = id })
+            db.update("core_menu_groups", { id = id }, data)
         else
             db.insert("core_menu_groups", data)
         end
@@ -121,7 +132,7 @@ function admin_dispatch(arg)
     end
 
     -- Delete group
-    if arg.path == "group/delete" then
+    if arg.uri == "/group/delete" then
         local id = tonumber(arg.query.id)
         db.delete("core_menu_items", { group_id = id })
         db.delete("core_menu_groups", { id = id })
@@ -129,7 +140,7 @@ function admin_dispatch(arg)
     end
 
     -- Save item
-    if arg.path == "item/save" then
+    if arg.uri == "/item/save" then
         local id = tonumber(arg.form.id)
         local group_id = tonumber(arg.form.group_id)
         local data = {
@@ -143,7 +154,7 @@ function admin_dispatch(arg)
             css = arg.form.css
         }
         if id and id > 0 then
-            db.update("core_menu_items", data, { id = id })
+            db.update("core_menu_items", { id = id }, data)
         else
             db.insert("core_menu_items", data)
         end
@@ -151,12 +162,12 @@ function admin_dispatch(arg)
     end
 
     -- Delete item
-    if arg.path == "item/delete" then
+    if arg.uri == "/item/delete" then
         local id = tonumber(arg.query.id)
         local group_id = tonumber(arg.query.group_id)
         db.delete("core_menu_items", { id = id })
         return { redirect = "/admin/menu/items?group_id=" .. tostring(group_id) }
     end
 
-    return "Unknown path: " .. tostring(arg.path)
+    return "Unknown path: " .. tostring(arg.uri)
 end

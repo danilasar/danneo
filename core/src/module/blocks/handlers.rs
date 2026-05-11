@@ -162,7 +162,7 @@ pub struct BlockForm {
     pub positcode: String,
     pub block_name: String,
     pub block_file: String,
-    pub block_active: Option<String>, // Checkbox sends "true" or nothing
+    pub block_active: Option<String>,
     pub block_weight: i32,
     pub block_setting: String,
 }
@@ -183,7 +183,7 @@ pub async fn save_block(
         block_active: Set(form.block_active.is_some()),
         block_weight: Set(form.block_weight),
         block_setting: Set(setting_json),
-        block_access: Set("all".to_string()), // Пока хардкодим
+        block_access: Set("all".to_string()),
         ..Default::default()
     };
 

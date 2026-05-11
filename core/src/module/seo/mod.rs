@@ -5,6 +5,8 @@ use axum::{Router, routing::get};
 use std::sync::Arc;
 use sea_orm::DatabaseConnection;
 
+pub mod handlers;
+
 pub struct SeoModule;
 
 impl SeoModule {
@@ -43,7 +45,15 @@ impl DanneoModule for SeoModule {
     }
 
     fn register_admin_routes(&self) -> Router<Arc<AppState>> {
-        Router::new().route("/", get(crate::apanel::seo::show_settings))
+        use axum::routing::post;
+        Router::new()
+            .route("/", get(handlers::show_settings))
+            .route("/save", post(handlers::save_settings))
+            .route("/sitemap", get(handlers::show_sitemap))
+            .route("/sitemap/save", post(handlers::save_sitemap))
+            .route("/social", get(handlers::show_social))
+            .route("/social/save", post(handlers::save_social))
+            .route("/social/delete", get(handlers::delete_social))
     }
 }
 

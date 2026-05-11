@@ -2,8 +2,8 @@ use crate::models::core_modules;
 use crate::module::DanneoModule;
 use crate::state::AppState;
 use axum::{
-    extract::{Form, Multipart, Path, State, Request, FromRequest},
-    http::{StatusCode, Method, Uri},
+    extract::{Form, Multipart, State, Request, FromRequest},
+    http::{StatusCode, Method},
     response::{IntoResponse, Redirect, Response, Html},
 };
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
@@ -548,14 +548,4 @@ async fn dispatch_admin_internal(
     }
 }
 
-pub async fn dispatch_admin(
-    state: State<Arc<AppState>>,
-    Path((module, path)): Path<(String, String)>,
-    req: Request,
-) -> Response {
-    if is_module_enabled(&state, &module).await {
-        dispatch_admin_internal(state.0, module, path, req).await
-    } else {
-        (StatusCode::NOT_FOUND, "Module disabled").into_response()
-    }
-}
+// dispatch_admin removed in favor of Axum nesting

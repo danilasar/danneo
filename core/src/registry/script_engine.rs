@@ -359,6 +359,13 @@ impl ScriptEngine {
             }))
         })?)?;
         danneo.set("http", http_table)?;
+        
+        // 7. danneo.Router
+        let router_table = lua.create_table()?;
+        router_table.set("new", lua.create_function(|_, _: ()| {
+            Ok(crate::registry::LuaRouter::default())
+        })?)?;
+        danneo.set("Router", router_table)?;
 
         lua.globals().set("danneo", danneo)?;
         
@@ -389,5 +396,42 @@ impl ScriptEngine {
             .map_err(|e| ScriptError::Runtime(e.to_string()))?;
 
         Ok(result)
+    }
+
+    pub async fn call_router_hook(
+        &self,
+        module_code: &str,
+        hook_name: &str,
+        _state: Arc<crate::state::AppState>,
+    ) -> Result<crate::registry::LuaRouter, ScriptError> {
+        let script = {
+            let scripts = self.scripts.read().await;
+            scripts
+                .get(module_code)
+                .cloned()
+                .ok_or_else(|| ScriptError::HookNotFound(module_code.to_string()))?
+        };
+
+        let lua = Lua::new();
+        let danneo = lua.create_table()?;
+        
+        // Register minimal API for router definition
+        let router_table = lua.create_table()?;
+        router_table.set("new", lua.create_function(|_, _: ()| {
+            Ok(crate::registry::LuaRouter::default())
+        })?)?;
+        danneo.set("Router", router_table)?;
+        lua.globals().set("danneo", danneo)?;
+
+        lua.load(&script).exec_async().await?;
+
+        let globals = lua.globals();
+        let hook: mlua::Function = match globals.get(hook_name) {
+            Ok(f) => f,
+            Err(_) => return Err(ScriptError::HookNotFound(hook_name.to_string())),
+        };
+
+        let res: crate::registry::LuaRouter = hook.call_async(()).await?;
+        Ok(res)
     }
 }

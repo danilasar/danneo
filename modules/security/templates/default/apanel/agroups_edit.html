@@ -2,7 +2,7 @@
 
 {% block content %}
 <div class="section">
-    <form action="/admin/agroups/save" method="POST">
+    <form action="/admin/security/groups/save" method="POST">
         {% if group %}
         <input type="hidden" name="id" value="{{ group.id }}">
         {% endif %}
@@ -39,7 +39,7 @@
             <tr>
                 <td class="ac" colspan="2" style="padding:15px;">
                     <input type="submit" value="Сохранить изменения" class="interface">
-                    <a href="/admin/agroups" class="interface" style="margin-left:10px;">Отмена</a>
+                    <a href="/admin/security/groups" class="interface" style="margin-left:10px;">Отмена</a>
                 </td>
             </tr>
         </table>

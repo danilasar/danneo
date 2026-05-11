@@ -32,6 +32,7 @@ pub struct AppState {
     pub routes: Arc<tokio::sync::RwLock<crate::registry::RouteRegistry>>,
     pub script_engine: Arc<crate::registry::ScriptEngine>,
     pub rpc_registry: Arc<crate::rpc::registry::RpcRegistry>,
+    pub function_registry: Arc<crate::registry::FunctionRegistry>,
 }
 
 impl AppState {
@@ -46,6 +47,7 @@ impl AppState {
 
         let db_arc = Arc::new(db);
         let rpc_registry = Arc::new(crate::rpc::registry::RpcRegistry::new());
+        let function_registry = Arc::new(crate::registry::FunctionRegistry::new());
 
         let script_engine = Arc::new(crate::registry::ScriptEngine::new(
             db_arc.clone(),
@@ -160,6 +162,7 @@ impl AppState {
             routes,
             script_engine: script_engine.clone(),
             rpc_registry: rpc_registry.clone(),
+            function_registry: function_registry.clone(),
         });
 
         // 7. Initialize Registries and scan modules
@@ -212,6 +215,7 @@ impl AppState {
             routes: self.routes.clone(),
             script_engine: self.script_engine.clone(),
             rpc_registry: self.rpc_registry.clone(),
+            function_registry: self.function_registry.clone(),
         }
     }
 

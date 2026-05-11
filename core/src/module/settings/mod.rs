@@ -9,6 +9,8 @@ use std::sync::Arc;
 use serde_json::{json, Value};
 use tracing::info;
 
+pub mod handlers;
+
 pub struct SettingsModule {
     db: Arc<DatabaseConnection>,
 }
@@ -42,7 +44,7 @@ impl DanneoModule for SettingsModule {
 
         // 2. Дефолтные настройки
         let defaults = [
-            ("site_name", "\"Danneo 2\""),
+            ("site_name", "\"Danneo\""),
             ("admin_email", "\"admin@example.com\""),
             ("site_url", "\"http://localhost:3000\""),
             ("site_temp", "\"Soft\""),
@@ -139,31 +141,10 @@ impl DanneoModule for SettingsModule {
 
     fn register_admin_routes(&self) -> Router<Arc<AppState>> {
         Router::new()
-            .route("/", get(crate::apanel::settings::show_settings))
-            .route("/save", post(crate::apanel::settings::save_settings))
+            .route("/", get(handlers::show_settings))
+            .route("/save", post(handlers::save_settings))
     }
 
-    fn admin_routes(&self) -> Vec<crate::registry::RouteDescriptor> {
-        use crate::registry::RouteDescriptor;
-        vec![
-            RouteDescriptor {
-                name: "settings.show".to_string(),
-                method: "GET".to_string(),
-                path: "/settings".to_string(),
-                handler: "show".to_string(),
-                entity: None,
-                template: None,
-            },
-            RouteDescriptor {
-                name: "settings.save".to_string(),
-                method: "POST".to_string(),
-                path: "/settings/save".to_string(),
-                handler: "save".to_string(),
-                entity: None,
-                template: None,
-            },
-        ]
-    }
 
     fn rpc_methods(&self) -> Vec<RpcMethodDescriptor> {
         vec![

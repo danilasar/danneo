@@ -6,8 +6,10 @@ use std::sync::Arc;
 use sea_orm::DatabaseConnection;
 
 pub mod migrations;
+pub mod handlers;
 
 pub struct BlocksModule;
+
 
 crate::inventory::submit! {
     migration::ModuleMigrationRegistration { migration: &migrations::CreateBlockTables }
@@ -37,7 +39,7 @@ impl DanneoModule for BlocksModule {
                         "code": "manage",
                         "category": "settings",
                         "label": "admin_blocks",
-                        "link": "/admin/blocks",
+                        "link": "/admin/blocks/",
                         "weight": 40
                     }
                 ]
@@ -47,12 +49,28 @@ impl DanneoModule for BlocksModule {
         ).await.ok();
         Ok(())
     }
+fn rpc_methods(&self) -> Vec<crate::rpc::RpcMethodDescriptor> {
+    use crate::rpc::{RpcMethodDescriptor, RpcVisibility};
+    vec![
+        RpcMethodDescriptor { name: "list_positions".into(), handler: "list_positions".into(), permission: None, visibility: RpcVisibility::Internal },
+        RpcMethodDescriptor { name: "save_position".into(), handler: "save_position".into(), permission: None, visibility: RpcVisibility::Internal },
+        RpcMethodDescriptor { name: "list_blocks".into(), handler: "list_blocks".into(), permission: None, visibility: RpcVisibility::Internal },
+        RpcMethodDescriptor { name: "edit_block".into(), handler: "edit_block".into(), permission: None, visibility: RpcVisibility::Internal },
+        RpcMethodDescriptor { name: "save_block".into(), handler: "save_block".into(), permission: None, visibility: RpcVisibility::Internal },
+        RpcMethodDescriptor { name: "delete_position".into(), handler: "delete_position".into(), permission: None, visibility: RpcVisibility::Internal },
+        RpcMethodDescriptor { name: "delete_block".into(), handler: "delete_block".into(), permission: None, visibility: RpcVisibility::Internal },
+    ]
+}
 
     fn register_admin_routes(&self) -> Router<Arc<AppState>> {
         Router::new()
-            .route("/", get(crate::apanel::blocks::list_blocks))
-            .route("/positions", get(crate::apanel::blocks::list_positions))
-            .route("/save_position", post(crate::apanel::blocks::save_position))
+            .route("/", get(handlers::list_blocks))
+            .route("/edit", get(handlers::edit_block))
+            .route("/save", post(handlers::save_block))
+            .route("/delete", get(handlers::delete_block))
+            .route("/positions", get(handlers::list_positions))
+            .route("/positions/save", post(handlers::save_position))
+            .route("/positions/delete", get(handlers::delete_position))
     }
 }
 

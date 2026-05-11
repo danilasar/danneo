@@ -43,10 +43,28 @@ function on_uninstall(arg)
     })
 end
 
-function admin_dispatch(arg)
-    local path = arg.path
+function register_routes()
+    local r = danneo.Router.new()
+    r:get("/news", "frontend_dispatch")
+    r:get("/news/:id", "frontend_dispatch")
+    return r
+end
 
-    if path == "list" then
+function register_admin_routes()
+    local r = danneo.Router.new()
+    r:get("/", "admin_dispatch")
+    r:get("/add", "admin_dispatch")
+    r:post("/save", "admin_dispatch")
+    return r
+end
+
+function admin_dispatch(arg)
+    local path = arg.uri -- Axum URI
+    
+    -- We can also use arg.handler if we want multiple dispatchers, 
+    -- but here we use one for simplicity or just check the uri.
+    
+    if arg.uri == "/" or arg.uri == "" then
         local news = db.select("news", { "id", "title", "created_at" })
         return {
             template = "news.admin_list.html",
@@ -54,7 +72,7 @@ function admin_dispatch(arg)
         }
     end
 
-    if path == "add" then
+    if arg.uri == "/add" then
         local categories = db.select("categories", { "id", "title" })
         return {
             template = "news.admin_edit.html",
@@ -62,7 +80,7 @@ function admin_dispatch(arg)
         }
     end
 
-    if path == "save" then
+    if arg.uri == "/save" then
         if arg.method == "POST" then
             local data = arg.form
             if data.cat_id ~= nil then
@@ -73,13 +91,11 @@ function admin_dispatch(arg)
         end
     end
 
-    return "Unknown admin path: " .. tostring(path)
+    return "Unknown admin path: " .. tostring(arg.uri)
 end
 
 function frontend_dispatch(arg)
-    local path = arg.path
-
-    if path == "news" then
+    if arg.uri == "/news" then
         local news = db.select("news", { "id", "title", "content", "created_at" })
         return {
             template = "news.standart.html",
@@ -107,7 +123,7 @@ function frontend_dispatch(arg)
         end
     end
 
-    return "Frontend path: " .. tostring(path)
+    return "Frontend path: " .. tostring(arg.uri)
 end
 
 function render_block(arg)
