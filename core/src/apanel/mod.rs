@@ -1,13 +1,7 @@
-pub mod agroups;
-pub mod amanage;
-pub mod blocks;
 pub mod crud;
 pub mod dashboard;
-pub mod design;
 pub mod middleware;
 pub mod modules;
-pub mod seo;
-pub mod settings;
 pub mod utils;
 
 use crate::state::AppState;
