@@ -164,11 +164,10 @@ pub async fn save_handle(
     }
 
     // --- HOOK: before_save ---
-    let arg = script_rhai::serde::to_dynamic(json!({
+    let arg = json!({
         "entity": &entity,
         "data": payload_val
-    }))
-    .unwrap_or(script_rhai::Dynamic::UNIT);
+    });
 
     if let Ok(res) = state
         .script_engine
@@ -176,10 +175,8 @@ pub async fn save_handle(
         .await
     {
         // Если скрипт вернул данные, используем их
-        if let Ok(new_data) = script_rhai::serde::from_dynamic::<serde_json::Value>(&res) {
-            if let Some(d) = new_data.get("data") {
-                payload_val = d.clone();
-            }
+        if let Some(d) = res.get("data") {
+            payload_val = d.clone();
         }
     }
 
@@ -203,11 +200,10 @@ pub async fn save_handle(
 
     if res.is_ok() {
         // --- HOOK: after_save ---
-        let arg_after = script_rhai::serde::to_dynamic(json!({
+        let arg_after = json!({
             "entity": entity,
             "data": payload_val
-        }))
-        .unwrap_or(script_rhai::Dynamic::UNIT);
+        });
         let _ = state
             .script_engine
             .call_hook(&module, "after_save", arg_after, state.clone())

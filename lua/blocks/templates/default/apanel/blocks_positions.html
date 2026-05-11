@@ -1,0 +1,86 @@
+{% extends "apanel/base.html" %}
+
+{% block content %}
+<div class="section">
+    <!-- Список позиций -->
+    <table class="work">
+        <caption>Управление позициями (зонами)</caption>
+        <tr>
+            <th>ID</th>
+            <th>Название позиции</th>
+            <th>Код в шаблоне</th>
+            <th>Порядок</th>
+            <th>Действие</th>
+        </tr>
+        {% for pos in positions %}
+        <tr>
+            <td class="ac">{{ pos.id }}</td>
+            <td class="al">{{ pos.positname }}</td>
+            <td class="ac"><code>{{ pos.positcode }}</code></td>
+            <td class="ac">{{ pos.pposit }}</td>
+            <td class="ac">
+                <a href="javascript:void(0)" class="edit-link" data-json='{{ pos | json_encode | safe }}' onclick="edit_position(this)">Изменить</a> |
+                <form action="/admin/blocks/positions/delete?id={{ pos.id }}" method="POST" style="display:inline;" onsubmit="return confirm('Удалить позицию?')">
+                    <button type="submit" style="background:none; border:none; color:#c00; cursor:pointer; text-decoration:underline; padding:0; font-family:inherit; font-size:inherit;">Удалить</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+
+    <br>
+
+    <!-- Форма добавления/редактирования -->
+    <form action="/admin/blocks/positions/save" method="post" name="posform">
+        <input type="hidden" name="id" id="pos_id">
+        <table class="work">
+            <caption id="form_caption">Добавить новую позицию</caption>
+            <tr>
+                <td class="ar" style="width:30%">Название позиции:</td>
+                <td class="al">
+                    <input type="text" name="positname" id="pos_name" size="40" required>
+                </td>
+            </tr>
+            <tr>
+                <td class="ar">Код в шаблоне (ID):</td>
+                <td class="al">
+                    <input type="text" name="positcode" id="pos_code" size="40" required>
+                    <br><small>Например: LEFT, RIGHT, TOP. Будет использоваться как {LEFT}</small>
+                </td>
+            </tr>
+            <tr>
+                <td class="ar">Порядок вывода:</td>
+                <td class="al">
+                    <input type="number" name="pposit" id="pos_weight" value="0" size="10">
+                </td>
+            </tr>
+            <tr>
+                <td class="ar">&nbsp;</td>
+                <td class="al">
+                    <input type="submit" class="but" value="Сохранить">
+                    <input type="button" class="but" value="Сброс" onclick="reset_form()">
+                </td>
+            </tr>
+        </table>
+    </form>
+</div>
+
+<script>
+function edit_position(el) {
+    const pos = JSON.parse(el.getAttribute('data-json'));
+    document.getElementById('pos_id').value = pos.id;
+    document.getElementById('pos_name').value = pos.positname;
+    document.getElementById('pos_code').value = pos.positcode;
+    document.getElementById('pos_weight').value = pos.pposit;
+    document.getElementById('form_caption').innerText = "Редактировать позицию: " + pos.positname;
+}
+
+function reset_form() {
+    document.getElementById('pos_id').value = "";
+    document.getElementById('pos_name').value = "";
+    document.getElementById('pos_code').value = "";
+    document.getElementById('pos_weight').value = "0";
+    document.getElementById('form_caption').innerText = "Добавить новую позицию";
+}
+</script>
+{% endblock %}

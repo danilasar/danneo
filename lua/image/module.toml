@@ -1,0 +1,15 @@
+[package]
+id = "image"
+name = "Image Processing"
+version = "2.0.0"
+description = "Native image processing and thumbnail generation"
+type = "module"
+
+[module]
+runtime_type = "native"
+
+[dependencies]
+storage = ">=2.0.0"
+
+[install]
+default_enabled = true

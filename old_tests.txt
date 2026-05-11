@@ -1,0 +1,68 @@
+origin/master:core/src/apanel/blocks.rs:    async fn setup_test_db() -> sea_orm::DatabaseConnection {
+origin/master:core/src/apanel/blocks.rs:        let db = setup_test_db().await;
+origin/master:core/src/apanel/design.rs:    async fn setup_test_db() -> sea_orm::DatabaseConnection {
+origin/master:core/src/apanel/design.rs:        let db = setup_test_db().await;
+origin/master:core/src/apanel/settings.rs:    async fn setup_test_db() -> sea_orm::DatabaseConnection {
+origin/master:core/src/apanel/settings.rs:        let db = setup_test_db().await;
+origin/master:core/src/auth.rs:            login: Set("test_admin".to_string()),
+origin/master:core/src/auth.rs:            login: "test_admin".to_string(),
+origin/master:core/tests/block_registry_tests.rs:    let (db, ctx, mut tera, state) = test_context().await;
+origin/master:core/tests/block_registry_tests.rs:    let (db, ctx, tera, state) = test_context().await;
+origin/master:core/tests/block_registry_tests.rs:    let state = common::create_test_state().await;
+origin/master:core/tests/common/mod.rs:pub async fn create_test_state() -> Arc<AppState> {
+origin/master:core/tests/crud_tests.rs:        table_name: "test_items".to_string(),
+origin/master:core/tests/module_system_integration_tests.rs:        .call_hook("test_mod", "test", Dynamic::UNIT, state.clone())
+origin/master:core/tests/module_system_integration_tests.rs:    engine.load_script_str("test_mod", script).await.unwrap();
+origin/master:core/tests/module_system_integration_tests.rs:    let state = common::create_test_state().await;
+origin/master:core/tests/rpc_system_tests.rs:async fn register_test_module(state: &AppState, code: &str) {
+origin/master:core/tests/rpc_system_tests.rs:    let state = common::create_test_state().await;
+origin/master:core/tests/rpc_system_tests.rs:    register_test_module(&state, "rec_mod").await;
+origin/master:core/tests/rpc_system_tests.rs:    register_test_module(&state, "test_mod").await;
+origin/master:core/tests/script_engine_tests.rs:        .call_hook("test_mod", "fail", Dynamic::UNIT, state.clone())
+origin/master:core/tests/script_engine_tests.rs:        .call_hook("test_mod", "hello", "World".into(), state.clone())
+origin/master:core/tests/script_engine_tests.rs:        .call_hook("test_mod", "loop_forever", Dynamic::UNIT, state.clone())
+origin/master:core/tests/script_engine_tests.rs:        .call_hook("test_mod", "process_entity", arg, state.clone())
+origin/master:core/tests/script_engine_tests.rs:    let state = common::create_test_state().await;
+origin/master:core/tests/system_integration_tests.rs:        code: Set("test_mod".to_string()),
+origin/master:core/tests/system_integration_tests.rs:    let res = state.script_engine.call_hook("test_sys", "check", script_rhai::Dynamic::UNIT, state.clone()).await.unwrap();
+origin/master:core/tests/system_integration_tests.rs:        .oneshot(Request::builder().uri("/test_mod/foo").body(Body::empty()).unwrap())
+origin/master:core/tests/system_integration_tests.rs:        .route("/test_mod/foo", axum::routing::get(|| async { "OK" }))
+origin/master:core/tests/system_integration_tests.rs:    state.script_engine.load_script_str("test_sys", script).await.unwrap();
+test_admin_login_success
+test_admin_menu_rpc_scenarios
+test_bootstrap_idempotency
+test_context
+test_create_insert_select
+test_db_isolation_lua_prefixes
+test_db_update_delete
+test_dependency_resolver_missing_mandatory
+test_dependency_resolver_success
+test_dependency_resolver_version_mismatch
+test_generate_slug_russian
+test_generate_slug_special_chars
+test_hook_not_found
+test_hook_with_complex_data
+test_jwt_creation_and_verification
+test_jwt_invalid_token
+test_list_blocks
+test_list_positions
+test_load_and_call_simple_hook
+test_middleware_blocks_disabled_module
+test_mod_news_menu_registration_via_rpc
+test_module_availability_api_lua
+test_module_availability_api_rust
+test_module_db_api_isolation
+test_pubgrub_semantic_version_conversion
+test_rbac_and_mac
+test_rpc_access_to_disabled_module
+test_rpc_max_depth
+test_rpc_native_call
+test_rpc_not_found
+test_save_file_path_traversal_protection
+test_save_position
+test_save_settings_redirect
+test_script_infinite_loop
+test_script_runtime_error
+test_seo_meta_serializes_for_tera
+test_show_design_page
+test_show_settings_page

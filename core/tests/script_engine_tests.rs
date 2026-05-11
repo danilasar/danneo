@@ -1,5 +1,4 @@
 use danneo_core::registry::script_engine::{ScriptEngine, ScriptError};
-use script_rhai::Dynamic;
 use serde_json::json;
 use std::sync::Arc;
 
@@ -22,7 +21,7 @@ async fn test_load_and_call_simple_hook() {
         .call_hook("test_mod", "hello", "World".into(), state.clone())
         .await
         .expect("Failed to call hook");
-    assert_eq!(result.to_string(), "Hello, World!");
+    assert_eq!(result.as_str().unwrap(), "Hello, World!");
 }
 
 #[tokio::test]
@@ -46,14 +45,12 @@ async fn test_hook_with_complex_data() {
         "processed": false,
         "tags": ["new"]
     });
-    let arg: Dynamic =
-        script_rhai::serde::to_dynamic(input).expect("Failed to serialize to dynamic");
+    let arg = input;
     let result = engine
         .call_hook("test_mod", "process_entity", arg, state.clone())
         .await
         .expect("Failed to call hook");
-    let output: serde_json::Value =
-        script_rhai::serde::from_dynamic(&result).expect("Failed to deserialize from dynamic");
+    let output = result;
     assert_eq!(output["count"], 11);
     assert_eq!(output["processed"], true);
     assert_eq!(output["tags"][1], "processed");
@@ -73,11 +70,11 @@ async fn test_script_runtime_error() {
         .await
         .expect("Failed to load script");
     let result = engine
-        .call_hook("test_mod", "fail", Dynamic::UNIT, state.clone())
+        .call_hook("test_mod", "fail", serde_json::Value::Null, state.clone())
         .await;
     match result {
-        Err(ScriptError::Runtime(e)) | Err(ScriptError::Lua(mlua::Error::RuntimeError(e))) => {
-            assert!(e.to_string().contains("Custom Error"));
+        Err(e) => {
+            assert!(e.contains("Custom Error"));
         }
         _ => panic!("Expected runtime error, got {:?}", result),
     }
@@ -121,7 +118,9 @@ async fn test_hook_not_found() {
         .call_hook("non_existent", "any_fn", "data".into(), state.clone())
         .await;
     match result {
-        Err(ScriptError::HookNotFound(_)) => {}
+        Err(e) => {
+            assert!(e.contains("HookNotFound") || e.contains("not found"));
+        }
         _ => panic!("Expected HookNotFound error"),
     }
 }

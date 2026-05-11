@@ -1,0 +1,48 @@
+{% extends "apanel/base.html" %}
+
+{% block content %}
+<div class="section">
+    <form action="/admin/security/groups/save" method="POST">
+        {% if group %}
+        <input type="hidden" name="id" value="{{ group.id }}">
+        {% endif %}
+
+        <table class="work">
+            <caption>{% if group %}Редактирование группы: {{ group.name }}{% else %}Создание новой группы{% endif %}</caption>
+            <tr>
+                <td class="al" style="width:200px;">Название группы</td>
+                <td class="al">
+                    <input type="text" name="name" value="{% if group %}{{ group.name }}{% endif %}" style="width:300px;" required>
+                </td>
+            </tr>
+            <tr>
+                <td class="al">Уровень доступа (1-100)</td>
+                <td class="al">
+                    <input type="number" name="level" value="{% if group %}{{ group.level }}{% else %}1{% endif %}" min="1" max="100" style="width:50px;" required>
+                    <span style="font-size:11px; color:#666; margin-left:10px;">100 - макс, 1 - мин.</span>
+                </td>
+            </tr>
+            <tr>
+                <td class="al" style="vertical-align:top; padding-top:10px;">Доступ к модулям</td>
+                <td class="al">
+                    <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap: 5px; padding: 10px 0;">
+                        {% for module in available_modules %}
+                        <label style="display:block; cursor:pointer;">
+                            <input type="checkbox" name="permissions" value="{{ module }}" 
+                                   {% if module in current_permissions %}checked{% endif %}>
+                            {{ module }}
+                        </label>
+                        {% endfor %}
+                    </div>
+                </td>
+            </tr>
+            <tr>
+                <td class="ac" colspan="2" style="padding:15px;">
+                    <input type="submit" value="Сохранить изменения" class="interface">
+                    <a href="/admin/security/groups" class="interface" style="margin-left:10px;">Отмена</a>
+                </td>
+            </tr>
+        </table>
+    </form>
+</div>
+{% endblock %}

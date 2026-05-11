@@ -1,0 +1,20 @@
+[package]
+name = "danneo-native-admin-menu"
+version = "2.0.0"
+edition = "2024"
+
+[dependencies]
+danneo-sdk = { path = "../../danneo-sdk" }
+sea-orm.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+async-trait.workspace = true
+tracing.workspace = true
+sea-query.workspace = true
+rust-i18n.workspace = true
+axum.workspace = true
+sea-orm-migration.workspace = true
+
+[dev-dependencies]
+danneo-core = { path = "../../core" }
+tokio = { workspace = true, features = ["full"] }

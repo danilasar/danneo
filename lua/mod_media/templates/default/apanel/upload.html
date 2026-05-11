@@ -1,0 +1,30 @@
+{% extends "apanel/base.html" %}
+
+{% block content %}
+<div class="section">
+    <h2>Загрузка медиа-файлов</h2>
+    
+    <div style="background: #f4f4f4; padding: 20px; border-radius: 5px;">
+        <form action="/admin/media/upload" method="POST" enctype="multipart/form-data">
+            <p>Выберите файл для загрузки в облако (MinIO):</p>
+            <input type="file" name="media_file" required>
+            <br><br>
+            <button type="submit" class="interface">Начать загрузку</button>
+        </form>
+    </div>
+
+    {% if message %}
+        <div style="margin-top:20px; color: green; font-weight: bold;">
+            {{ message }}
+        </div>
+    {% endif %}
+
+    {% if file_url %}
+        <div style="margin-top:20px;">
+            <p>Файл успешно загружен!</p>
+            <p>Путь: <code>{{ file_path }}</code></p>
+            <a href="{{ file_url }}" target="_blank" class="btn">Открыть файл</a>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

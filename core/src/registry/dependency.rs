@@ -1,13 +1,7 @@
 use crate::registry::PackageManifest;
 use pubgrub::{
-    Range,
-    SelectedDependencies,
-    DependencyProvider,
-    resolve,
-    SemanticVersion,
-    PubGrubError,
-    PackageResolutionStatistics,
-    DependencyConstraints,
+    DependencyConstraints, DependencyProvider, PackageResolutionStatistics, PubGrubError, Range,
+    SelectedDependencies, SemanticVersion, resolve,
 };
 use std::collections::HashMap;
 use thiserror::Error;
@@ -40,10 +34,13 @@ impl DependencyProvider for ModuleDependencyProvider {
         package: &Self::P,
         version: &Self::V,
     ) -> Result<pubgrub::Dependencies<Self::P, Self::VS, Self::M>, Self::Err> {
-        let packages = self.available_packages.get(package)
+        let packages = self
+            .available_packages
+            .get(package)
             .ok_or_else(|| DependencyProviderError::PackageNotFound(package.clone()))?;
-        
-        let manifest = packages.iter()
+
+        let manifest = packages
+            .iter()
             .find(|(v, _)| v == version)
             .map(|(_, m)| m)
             .ok_or_else(|| DependencyProviderError::VersionNotFound(package.clone(), *version))?;
@@ -65,13 +62,20 @@ impl DependencyProvider for ModuleDependencyProvider {
             }
         }
 
-        Ok(pubgrub::Dependencies::Available(DependencyConstraints::from_iter(deps)))
+        Ok(pubgrub::Dependencies::Available(
+            DependencyConstraints::from_iter(deps),
+        ))
     }
 
-    fn choose_version(&self, package: &Self::P, range: &Self::VS) -> Result<Option<Self::V>, Self::Err> {
+    fn choose_version(
+        &self,
+        package: &Self::P,
+        range: &Self::VS,
+    ) -> Result<Option<Self::V>, Self::Err> {
         let packages = self.available_packages.get(package);
         if let Some(versions) = packages {
-            let mut matched_versions: Vec<_> = versions.iter()
+            let mut matched_versions: Vec<_> = versions
+                .iter()
                 .filter(|(v, _)| range.contains(v))
                 .map(|(v, _)| *v)
                 .collect();
@@ -82,14 +86,21 @@ impl DependencyProvider for ModuleDependencyProvider {
         }
     }
 
-    fn prioritize(&self, _package: &Self::P, _range: &Self::VS, _stats: &PackageResolutionStatistics) -> Self::Priority {
+    fn prioritize(
+        &self,
+        _package: &Self::P,
+        _range: &Self::VS,
+        _stats: &PackageResolutionStatistics,
+    ) -> Self::Priority {
         0
     }
 }
 
 pub fn parse_semantic_version(s: &str) -> Result<SemanticVersion, ()> {
     let parts: Vec<&str> = s.split('.').collect();
-    if parts.len() != 3 { return Err(()); }
+    if parts.len() != 3 {
+        return Err(());
+    }
     let major = parts[0].parse().map_err(|_| ())?;
     let minor = parts[1].parse().map_err(|_| ())?;
     let patch = parts[2].parse().map_err(|_| ())?;
@@ -102,8 +113,10 @@ pub async fn resolve_dependencies(
     target_version: SemanticVersion,
     all_manifests: HashMap<String, Vec<(SemanticVersion, PackageManifest)>>,
 ) -> Result<SelectedDependencies<String, SemanticVersion>, String> {
-    let provider = ModuleDependencyProvider { available_packages: all_manifests };
-    
+    let provider = ModuleDependencyProvider {
+        available_packages: all_manifests,
+    };
+
     match resolve(&provider, target_package, target_version) {
         Ok(res) => Ok(res),
         Err(PubGrubError::NoSolution(e)) => Err(format!("Dependency resolution failed: {:?}", e)),
@@ -117,6 +130,9 @@ pub fn to_pubgrub_ver(v: &str) -> SemanticVersion {
 }
 
 /// Проверка доступен ли модуль (установлен и активен)
-pub async fn is_module_available(module_code: &str, state: std::sync::Arc<crate::state::AppState>) -> bool {
+pub async fn is_module_available(
+    module_code: &str,
+    state: std::sync::Arc<crate::state::AppState>,
+) -> bool {
     state.is_module_available(module_code).await
 }

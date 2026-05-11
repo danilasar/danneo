@@ -1,10 +1,11 @@
 use async_trait::async_trait;
-use danneo_core::rpc::registry::{RpcHandler, RpcRegistry};
-use danneo_core::rpc::{RpcContext, RpcError, RpcMethodDescriptor, RpcVisibility};
+use danneo_core::rpc::RpcRegistry;
+use danneo_core::rpc::{IRpcRegistry, RpcContext, RpcError, RpcMethodDescriptor, RpcVisibility};
 use danneo_core::state::AppState;
+use danneo_sdk::rpc::RpcHandler;
+use sea_orm::{ActiveModelTrait, Set};
 use serde_json::json;
 use std::sync::Arc;
-use sea_orm::{ActiveModelTrait, Set};
 
 mod common;
 
@@ -48,14 +49,17 @@ async fn register_test_module(state: &AppState, code: &str) {
         installed_at: Set(now),
         updated_at: Set(now),
         ..Default::default()
-    }.insert(state.db.as_ref()).await.unwrap();
+    }
+    .insert(state.db.as_ref())
+    .await
+    .unwrap();
 }
 
 #[tokio::test]
 async fn test_rpc_native_call() {
     let state = common::create_test_state().await;
     register_test_module(&state, "test_mod").await;
-    
+
     let registry = RpcRegistry::new();
     let handler = Arc::new(MockNativeHandler);
 
@@ -110,7 +114,7 @@ async fn test_rpc_not_found() {
 async fn test_rpc_max_depth() {
     let state = common::create_test_state().await;
     register_test_module(&state, "rec_mod").await;
-    
+
     let registry = Arc::new(RpcRegistry::new());
 
     struct RecursiveHandler {

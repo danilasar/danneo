@@ -1,0 +1,63 @@
+{% extends "apanel/base.html" %}
+
+{% block content %}
+<div class="section">
+    <div style="margin-bottom:10px;">
+        <a href="/admin/seo" class="interface{% if active_tab == "settings" %} current{% endif %}">Настройки</a>
+        <a href="/admin/seo/sitemap" class="interface{% if active_tab == "sitemap" %} current{% endif %}">Google Site-Map</a>
+        <a href="/admin/seo/social" class="interface{% if active_tab == "social" %} current{% endif %}">Социальные закладки</a>
+    </div>
+
+    <form action="/admin/seo/save" method="post">
+        <table class="work">
+            <caption>SEO / Настройки</caption>
+            <tr>
+                <td class="ar">Включить rewrite:</td>
+                <td class="al"><input name="rewrite" value="yes" type="checkbox" {% if seo_settings.rewrite %}checked{% endif %}></td>
+                <td class="al">Красивые URL вместо index.php?dn=...</td>
+            </tr>
+            <tr>
+                <td class="ar">Включить ЧПУ slug:</td>
+                <td class="al"><input name="cpu" value="yes" type="checkbox" {% if seo_settings.cpu %}checked{% endif %}></td>
+                <td class="al">Использовать сохраненные CPU/slug для материалов и категорий</td>
+            </tr>
+            <tr>
+                <td class="ar">Социальные закладки:</td>
+                <td class="al"><input name="social_bookmark" value="yes" type="checkbox" {% if seo_settings.social_bookmark %}checked{% endif %}></td>
+                <td class="al">Показывать сервисы быстрой публикации</td>
+            </tr>
+            <tr>
+                <td class="ar">Анкоры:</td>
+                <td class="al"><input name="anchor" value="yes" type="checkbox" {% if seo_settings.anchor %}checked{% endif %}></td>
+                <td class="al">Поддержка SEO-ссылок из legacy-раздела anchor</td>
+            </tr>
+        </table>
+
+        <br>
+
+        <table class="work">
+            <caption>Префиксы модулей (ЧПУ)</caption>
+            <tr>
+                <th>Модуль</th>
+                <th>Код</th>
+                <th>Префикс URL</th>
+            </tr>
+            {% for module in modules %}
+            <tr>
+                <td class="al">{{ module.title }}</td>
+                <td class="ac"><code>{{ module.code }}</code></td>
+                <td class="al">
+                    <input type="text" name="prefix_{{ module.code }}" size="40" value="{{ module.prefix }}">
+                </td>
+            </tr>
+            {% endfor %}
+            <tr>
+                <td class="ar">&nbsp;</td>
+                <td class="al" colspan="2">
+                    <input accesskey="s" class="but" value="Сохранить" type="submit">
+                </td>
+            </tr>
+        </table>
+    </form>
+</div>
+{% endblock %}

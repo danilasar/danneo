@@ -1,24 +1,27 @@
-use danneo_core::state::AppState;
-use sea_orm::Database;
-use std::sync::Arc;
 use axum::{
     body::Body,
     http::{Request, StatusCode},
 };
+use danneo_core::state::AppState;
+use sea_orm::Database;
+use std::sync::Arc;
 use tower::ServiceExt;
 
-#[tokio::test]
-async fn test_module_availability_api_rust() {
-    let db = Database::connect("sqlite::memory:").await.unwrap();
-    use sea_orm_migration::MigratorTrait;
-    migration::Migrator::up(&db, None).await.unwrap();
-    let state = Arc::new(AppState::new(db).await.unwrap());
+use danneo_sdk::danneotest;
 
+#[danneotest]
+async fn test_module_availability_api_rust(state: Arc<AppState>) {
     // 1. Check existing core module
-    assert!(state.is_module_available("admin_menu").await, "admin_menu should be available by default");
+    assert!(
+        state.is_module_available("admin_menu").await,
+        "admin_menu should be available by default"
+    );
 
     // 2. Check non-existent
-    assert!(!state.is_module_available("ghost_module").await, "ghost_module should not be available");
+    assert!(
+        !state.is_module_available("ghost_module").await,
+        "ghost_module should not be available"
+    );
 
     // 3. Check disabled module
     use sea_orm::{ActiveModelTrait, Set};
@@ -37,18 +40,19 @@ async fn test_module_availability_api_rust() {
         installed_at: Set(now),
         updated_at: Set(now),
         ..Default::default()
-    }.insert(state.db.as_ref()).await.unwrap();
+    }
+    .insert(state.db.as_ref())
+    .await
+    .unwrap();
 
-    assert!(!state.is_module_available("test_mod").await, "Disabled module should not be available via API");
+    assert!(
+        !state.is_module_available("test_mod").await,
+        "Disabled module should not be available via API"
+    );
 }
 
-#[tokio::test]
-async fn test_module_availability_api_lua() {
-    let db = Database::connect("sqlite::memory:").await.unwrap();
-    use sea_orm_migration::MigratorTrait;
-    migration::Migrator::up(&db, None).await.unwrap();
-    let state = Arc::new(AppState::new(db).await.unwrap());
-
+#[danneotest]
+async fn test_module_availability_api_lua(state: Arc<AppState>) {
     // Define a script that uses system.is_available
     let script = r#"
         function check(arg)
@@ -58,34 +62,47 @@ async fn test_module_availability_api_lua() {
             }
         end
     "#;
-    state.script_engine.load_script_str("test_sys", script).await.unwrap();
+    state
+        .script_engine
+        .load_script_str("test_sys", script)
+        .await
+        .unwrap();
 
-    let res = state.script_engine.call_hook("test_sys", "check", script_rhai::Dynamic::UNIT, state.clone()).await.unwrap();
-    let res_map: serde_json::Value = script_rhai::serde::from_dynamic(&res).unwrap();
+    let res_map = state
+        .script_engine
+        .call_hook("test_sys", "check", serde_json::Value::Null, state.clone())
+        .await
+        .unwrap();
 
     assert_eq!(res_map["admin_menu"], true);
     assert_eq!(res_map["fake"], false);
 }
 
-#[tokio::test]
-async fn test_bootstrap_idempotency() {
-    let db = Database::connect("sqlite::memory:").await.unwrap();
-    use sea_orm_migration::MigratorTrait;
-    migration::Migrator::up(&db, None).await.unwrap();
-    
-    // 1. Initial boot (AppState::new calls bootstrap internally)
-    let state = Arc::new(AppState::new(db).await.unwrap());
-    
+#[danneotest]
+async fn test_bootstrap_idempotency(state: Arc<AppState>) {
     // Check if flag is set
     use sea_orm::{ConnectionTrait, Statement};
-    let row = state.db.query_one(Statement::from_string(state.db.get_database_backend(), 
-        "SELECT value FROM core_system_state WHERE key = 'is_bootstrapped'")).await.unwrap().unwrap();
+    let row = state
+        .db
+        .query_one(Statement::from_string(
+            state.db.get_database_backend(),
+            "SELECT value FROM core_system_state WHERE key = 'is_bootstrapped'",
+        ))
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(row.try_get::<String>("", "value").unwrap(), "true");
 
     // 2. Simulate manual uninstallation of a core module
-    state.db.execute(Statement::from_string(state.db.get_database_backend(), 
-        "DELETE FROM core_modules WHERE code = 'settings'")).await.unwrap();
-    
+    state
+        .db
+        .execute(Statement::from_string(
+            state.db.get_database_backend(),
+            "DELETE FROM core_modules WHERE code = 'settings'",
+        ))
+        .await
+        .unwrap();
+
     assert!(!state.is_module_available("settings").await);
 
     // 3. Second bootstrap attempt (manual)
@@ -97,20 +114,18 @@ async fn test_bootstrap_idempotency() {
         state.script_engine.clone(),
         state.clone(),
     );
-    
+
     installer.bootstrap().await.unwrap();
 
     // 4. Verify that 'settings' did NOT reappear because flag exists
-    assert!(!state.is_module_available("settings").await, "Uninstalled module should not be restored if system is already bootstrapped");
+    assert!(
+        !state.is_module_available("settings").await,
+        "Uninstalled module should not be restored if system is already bootstrapped"
+    );
 }
 
-#[tokio::test]
-async fn test_middleware_blocks_disabled_module() {
-    let db = Database::connect("sqlite::memory:").await.unwrap();
-    use sea_orm_migration::MigratorTrait;
-    migration::Migrator::up(&db, None).await.unwrap();
-    let state = Arc::new(AppState::new(db).await.unwrap());
-
+#[danneotest]
+async fn test_middleware_blocks_disabled_module(state: Arc<AppState>) {
     // Create an admin router with middleware
     let admin_routes = axum::Router::new()
         .route("/test_mod/foo", axum::routing::get(|| async { "OK" }))
@@ -120,13 +135,16 @@ async fn test_middleware_blocks_disabled_module() {
         ));
 
     // 1. Request to module not in DB -> should be 404
-    let mut req = Request::builder().uri("/test_mod/foo").body(Body::empty()).unwrap();
-    req.extensions_mut().insert(danneo_core::module::ModuleInfo { code: "test_mod".to_string() });
-    
-    let response = admin_routes.clone()
-        .oneshot(req)
-        .await
+    let mut req = Request::builder()
+        .uri("/test_mod/foo")
+        .body(Body::empty())
         .unwrap();
+    req.extensions_mut()
+        .insert(danneo_sdk::models::module::ModuleInfo {
+            code: "test_mod".to_string(),
+        });
+
+    let response = admin_routes.clone().oneshot(req).await.unwrap();
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
 
     // 2. Enable module in DB
@@ -146,15 +164,21 @@ async fn test_middleware_blocks_disabled_module() {
         installed_at: Set(now),
         updated_at: Set(now),
         ..Default::default()
-    }.insert(state.db.as_ref()).await.unwrap();
+    }
+    .insert(state.db.as_ref())
+    .await
+    .unwrap();
 
     // 3. Request again -> should be 200
-    let mut req2 = Request::builder().uri("/test_mod/foo").body(Body::empty()).unwrap();
-    req2.extensions_mut().insert(danneo_core::module::ModuleInfo { code: "test_mod".to_string() });
-
-    let response = admin_routes
-        .oneshot(req2)
-        .await
+    let mut req2 = Request::builder()
+        .uri("/test_mod/foo")
+        .body(Body::empty())
         .unwrap();
+    req2.extensions_mut()
+        .insert(danneo_sdk::models::module::ModuleInfo {
+            code: "test_mod".to_string(),
+        });
+
+    let response = admin_routes.oneshot(req2).await.unwrap();
     assert_eq!(response.status(), StatusCode::OK);
 }

@@ -1,0 +1,18 @@
+{% extends "index.html" %}
+{% block content %}
+<div class="news-list">
+    <h1>Новости</h1>
+    {% if news | length > 0 %}
+        {% for item in news %}
+            <div class="news-item" style="margin-bottom: 20px; border-bottom: 1px solid #eee; padding-bottom: 10px;">
+                <h2>{{ item.title }}</h2>
+                <div class="news-date" style="color: #888; font-size: 0.9em;">{{ item.created_at }}</div>
+                <div class="news-preview">{{ item.content | truncate(length=200) }}</div>
+                <a href="/news/{{ item.id }}">Подробнее</a>
+            </div>
+        {% endfor %}
+    {% else %}
+        <p>Новостей пока нет.</p>
+    {% endif %}
+</div>
+{% endblock %}

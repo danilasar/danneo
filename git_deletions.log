@@ -1,0 +1,56 @@
+commit dadb48c474c0ddb66298a7c775ba4ab48c7424ca
+Author: Данила Григорьев <danila.sar@yandex.ru>
+Date:   Mon May 11 14:10:18 2026 +0400
+
+    feat: система тестирования, вынос функционала в модули
+
+ delete mode 100644 core/src/apanel/settings.rs
+
+commit d0ef1eef74a68f5a236da2b51ea6be072328be87
+Author: Данила Григорьев <danila.sar@yandex.ru>
+Date:   Mon May 11 05:20:01 2026 +0400
+
+    chore(core): добавил зависимости once_cell, futures, clap и nix
+
+ delete mode 100644 core/src/apanel/agroups.rs
+
+commit 6f180667bf6cb45a8df9677d58240d53d424b02a
+Author: Данила Григорьев <danila.sar@yandex.ru>
+Date:   Mon May 11 02:41:05 2026 +0400
+
+    feat: миграции, API, библиотечные модули и децентрализация
+
+ delete mode 100644 core/src/module/admin_menu.rs
+ delete mode 100644 core/src/module/native_demo.rs
+ delete mode 100644 core/src/module/seo.rs
+ delete mode 100644 migration/src/m20260508_000001_create_core_tables.rs
+ delete mode 100644 migration/src/m20260508_000002_create_block_tables.rs
+ delete mode 100644 migration/src/m20260508_000003_create_menu_tables.rs
+ delete mode 100644 migration/src/m20260508_000004_update_core_admins.rs
+ delete mode 100644 migration/src/m20260508_000005_add_admin_groups_and_levels.rs
+
+commit 6e6f52fe8b1e8a146d7164690c056120d42cef2d
+Author: Данила Григорьев <danila.sar@yandex.ru>
+Date:   Sun May 10 18:45:06 2026 +0400
+
+    feat: глубокая переработка блоков и нативных модулей
+
+ delete mode 100644 core/src/apanel/menu.rs
+ delete mode 100644 core/src/blocks/menu.rs
+
+commit 4c4a8a2e5c18d11c0a886f9dea55350f8ab6f489
+Author: Данила Григорьев <danila.sar@yandex.ru>
+Date:   Sat May 9 08:15:47 2026 +0400
+
+    feat: RPC модулей
+
+ delete mode 100644 modules/mod_hello/admin_menu.json
+ delete mode 100644 modules/mod_news/admin_menu.json
+
+commit 32023c180a7b6fd7fab433faf4b9d40ee5b214fc
+Author: Данила Григорьев <danila.sar@yandex.ru>
+Date:   Fri May 8 05:37:14 2026 +0400
+
+    feat: базовый функционал тем
+
+ delete mode 100644 core/static/apanel/images/bgbg.gif

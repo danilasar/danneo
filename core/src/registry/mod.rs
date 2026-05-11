@@ -1,19 +1,18 @@
 pub mod block_registry;
 pub mod dependency;
-pub mod function_registry;
 pub mod installer;
-pub mod manifest;
 pub mod module_registry;
 pub mod package_registry;
+pub mod route_registry;
 pub mod script_engine;
 
-pub mod route_registry;
+pub use block_registry::BlockRegistry;
+pub use dependency::*;
+pub use installer::PackageInstaller;
+pub use module_registry::ModuleRegistry;
+pub use package_registry::PackageRegistry;
+pub use route_registry::{LuaRouter, RouteRegistry};
+pub use script_engine::ScriptEngine;
 
-pub use block_registry::*;
-pub use function_registry::*;
-pub use installer::*;
-pub use manifest::*;
-pub use module_registry::*;
-pub use package_registry::*;
-pub use route_registry::*;
-pub use script_engine::*;
+pub use danneo_sdk::functions::*;
+pub use danneo_sdk::registry::*;

@@ -1,41 +1,25 @@
-use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation, decode, encode};
-use serde::{Deserialize, Serialize};
+pub use danneo_sdk::auth::{AuthService, Claims};
 
-/// Полезная нагрузка токена (то, что будет храниться внутри JWT)
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
-pub struct Claims {
-    pub admin_id: i32,
-    pub exp: usize,  // Timestamp окончания жизни токена
-    pub iat: usize,  // Timestamp выпуска токена
-    pub jti: String, // Уникальный идентификатор токена (JWT ID)
-}
-
-/// Сервис для работы с JWT
-#[derive(Clone)]
-pub struct AuthService {
-    secret: String,
-}
-
-#[derive(Deserialize)]
+#[derive(serde::Deserialize)]
 pub struct LoginRequest {
     pub login: String,
     pub password: String,
 }
 
-#[derive(Serialize)]
+#[derive(serde::Serialize)]
 pub struct LoginResponse {
     pub token: String,
 }
 
 use crate::models::core_admins;
-use crate::state::AppState;
 use axum::{
     extract::{Json, State},
+    http::StatusCode,
     response::IntoResponse,
 };
+pub use danneo_sdk::state::AppState;
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use std::sync::Arc;
-use uuid::Uuid;
 
 pub async fn admin_login(
     State(state): State<Arc<AppState>>,
@@ -71,49 +55,6 @@ pub async fn admin_login(
     Ok(Json(LoginResponse { token }))
 }
 
-impl AuthService {
-    pub fn new(secret: String) -> Self {
-        Self { secret }
-    }
-
-    /// Генерация токена для администратора
-    pub fn create_token(
-        &self,
-        admin_id: i32,
-        exp: usize,
-        iat: usize,
-    ) -> jsonwebtoken::errors::Result<String> {
-        let jti = Uuid::new_v4().to_string();
-        let claims = Claims {
-            admin_id,
-            exp,
-            iat,
-            jti,
-        };
-        encode(
-            &Header::default(),
-            &claims,
-            &EncodingKey::from_secret(self.secret.as_ref()),
-        )
-    }
-
-    /// Проверка валидности токена и извлечение данных
-    pub fn verify_token(&self, token: &str) -> jsonwebtoken::errors::Result<Claims> {
-        let token_data = decode::<Claims>(
-            token,
-            &DecodingKey::from_secret(self.secret.as_ref()),
-            &Validation::default(),
-        )?;
-        Ok(token_data.claims)
-    }
-}
-
-use axum::{
-    async_trait,
-    extract::{FromRef, FromRequestParts},
-    http::{StatusCode, request::Parts},
-};
-
 // Обработчик для страницы входа
 pub async fn show_login_page(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let settings = state.settings.read().await;
@@ -126,62 +67,6 @@ pub async fn show_login_page(State(state): State<Arc<AppState>>) -> impl IntoRes
             tracing::error!("Template error: {}", e);
             axum::response::Html("<h1>Internal Server Error</h1>".to_string())
         }
-    }
-}
-
-// Для извлечения Claims из заголовка Authorization или Cookies
-#[async_trait]
-impl<S> FromRequestParts<S> for Claims
-where
-    Arc<AppState>: axum::extract::FromRef<S>,
-    S: Send + Sync,
-{
-    type Rejection = (StatusCode, &'static str);
-
-    async fn from_request_parts(
-        parts: &mut Parts,
-        state: &S,
-    ) -> std::result::Result<Self, Self::Rejection> {
-        let state = Arc::<AppState>::from_ref(state);
-
-        // 1. Пытаемся взять из заголовка Authorization
-        let auth_header = parts
-            .headers
-            .get("Authorization")
-            .and_then(|header| header.to_str().ok());
-
-        let mut token = None;
-
-        if let Some(auth_header) = auth_header {
-            if auth_header.starts_with("Bearer ") {
-                token = Some(auth_header[7..].to_string());
-            }
-        }
-
-        // 2. Если в заголовке нет, ищем в Cookies
-        if token.is_none() {
-            if let Some(cookie_header) = parts.headers.get("Cookie").and_then(|h| h.to_str().ok()) {
-                for cookie in cookie_header.split(';') {
-                    let cookie = cookie.trim();
-                    if cookie.starts_with("danneo_token=") {
-                        token = Some(cookie["danneo_token=".len()..].to_string());
-                        break;
-                    }
-                }
-            }
-        }
-
-        if let Some(token) = token {
-            let auth_service = AuthService::new(state.jwt_secret.clone());
-            return auth_service
-                .verify_token(&token)
-                .map_err(|_| (StatusCode::UNAUTHORIZED, "Invalid or expired token"));
-        }
-
-        Err((
-            StatusCode::UNAUTHORIZED,
-            "Missing Authorization header or cookie",
-        ))
     }
 }
 
@@ -220,14 +105,26 @@ mod tests {
     #[tokio::test]
     async fn test_admin_login_success() {
         use crate::models::core_admins;
-        use sea_orm::{ActiveModelTrait, Database, Set, ConnectionTrait, Statement};
+        use crate::state::init_state;
+        use sea_orm::{ActiveModelTrait, ConnectionTrait, Database, Set, Statement};
 
         let db = Database::connect("sqlite::memory:").await.unwrap();
-        let state = Arc::new(AppState::new(db).await.unwrap());
+        // В тестах теперь используем init_state, так как AppState::new больше нет
+        let state = init_state(db).await.unwrap();
 
         // Debug: check tables
-        let tables = state.db.query_all(Statement::from_string(state.db.get_database_backend(), "SELECT name FROM sqlite_master WHERE type='table'")).await.unwrap();
-        let table_names: Vec<String> = tables.into_iter().map(|r| r.try_get("", "name").unwrap()).collect();
+        let tables = state
+            .db
+            .query_all(Statement::from_string(
+                state.db.get_database_backend(),
+                "SELECT name FROM sqlite_master WHERE type='table'",
+            ))
+            .await
+            .unwrap();
+        let table_names: Vec<String> = tables
+            .into_iter()
+            .map(|r| r.try_get("", "name").unwrap())
+            .collect();
         eprintln!("Test: existing tables: {:?}", table_names);
 
         let password = "my_secure_password";

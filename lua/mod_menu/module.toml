@@ -1,0 +1,62 @@
+[package]
+id = "mod_menu"
+name = "Site Menu"
+version = "1.0.0"
+description = "Site menu management for frontend"
+type = "module"
+
+[module]
+runtime_type = "lua"
+
+[dependencies]
+admin_menu = ">=2.0.0"
+
+[entrypoints]
+hooks = "scripts/hooks.lua"
+
+[rpc]
+namespace = "mod_menu"
+
+[[admin_routes]]
+name = "menu_list"
+method = "GET"
+path = "/menu"
+handler = "list"
+
+[[admin_routes]]
+name = "menu_items"
+method = "GET"
+path = "/menu/items"
+handler = "items"
+
+[[admin_routes]]
+name = "group_save"
+method = "POST"
+path = "/menu/group/save"
+handler = "group/save"
+
+[[admin_routes]]
+name = "group_delete"
+method = "GET"
+path = "/menu/group/delete"
+handler = "group/delete"
+
+[[admin_routes]]
+name = "item_save"
+method = "POST"
+path = "/menu/item/save"
+handler = "item/save"
+
+[[admin_routes]]
+name = "item_delete"
+method = "GET"
+path = "/menu/item/delete"
+handler = "item/delete"
+
+[[rpc.methods]]
+name = "get_menu"
+handler = "rpc_get_menu"
+visibility = "Internal"
+
+[install]
+default_enabled = true

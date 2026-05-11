@@ -1,0 +1,12 @@
+[package]
+id = "seo"
+name = "SEO Management"
+version = "2.0.0"
+description = "Sitemaps and metadata management"
+type = "module"
+
+[module]
+runtime_type = "native"
+
+[install]
+default_enabled = true

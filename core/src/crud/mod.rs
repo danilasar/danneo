@@ -25,7 +25,7 @@ pub struct FieldSchema {
     pub label: Option<String>,
 }
 
-fn row_value(row: &sea_orm::QueryResult, col: &str) -> Value {
+pub fn row_value(row: &sea_orm::QueryResult, col: &str) -> Value {
     if let Ok(Some(value)) = row.try_get::<Option<String>>("", col) {
         return Value::String(value);
     }

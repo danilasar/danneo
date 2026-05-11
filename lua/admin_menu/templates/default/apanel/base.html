@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Danneo APanel - {{ site_name }}</title>
+    <link rel="stylesheet" href="/static/apanel/css/template.css">
+    <link rel="stylesheet" href="/static/apanel/css/filebrowser.css">
+    <link rel="stylesheet" href="/static/apanel/css/calendar/calendar.css" />
+    <link rel="stylesheet" href="/static/apanel/css/colorbox/colorbox.css" />
+    <link rel="stylesheet" href="/static/apanel/css/colorpicker.css" />
+
+    <script src="/static/apanel/javascript/jquery.js"></script>
+    <script src="/static/apanel/javascript/script.js"></script>
+    <script src="/static/apanel/javascript/jquery.apanel.js"></script>
+    <script src="/static/apanel/javascript/jquery.filebrowser.js"></script>
+    <script src="/static/apanel/javascript/jquery.colorbox.js"></script>
+    <script src="/static/apanel/javascript/jquery.colorpicker.js"></script>
+    <script src="/static/apanel/javascript/calendar/calendar.js"></script>
+    <script>
+        $(function () {
+            $.template = "Old";
+            $.errors = "{{ t(key='admin_error') }}";
+            $.system();
+
+            $("#menu-toggle").click(function () {
+                $("#aside").toggle();
+                if ($("#aside").is(":hidden")) {
+                    $("#menup").attr({ src: "/static/apanel/images/open.gif" });
+                } else {
+                    $("#menup").attr({ src: "/static/apanel/images/closed.gif" });
+                }
+            });
+        });
+    </script>
+</head>
+
+<body>
+    <div id="wrapper">
+        <div id="header">
+            <div id="hgroup">
+                <h1 id="logo">{{ t(key='admin_panel') }}</h1>
+            </div>
+        </div>
+        <ul id="nav">
+            <li id="nav-left">
+                <a href="/" target="_blank">{{ t(key='admin_goto_site') }}</a>
+                <a href="/admin/dashboard">{{ t(key='admin_dashboard') }}</a>
+            </li>
+            <li id="nav-right">
+                <a href="#" onclick="logout()">{{ t(key='admin_exit') }}</a>
+            </li>
+        </ul>
+        <div id="content">
+            <table id="content-table">
+                <tr>
+                    <td id="aside" class="menuinterface bill">
+                        {% for supercat in admin_menu | default(value=[]) %}
+                            <div class="menupanelin">{{ supercat.label }}</div>
+                            <div class="menu-{{ supercat.code }}">
+                                {% for cat in supercat.categories %}
+                                    <div class="panels menupanel" id="{{ cat.code }}">
+                                        {% if cat.icon %}
+                                            <img src="/static/apanel/images/menu/{{ cat.icon }}" alt="">
+                                        {% endif %}
+                                        <span>{{ cat.label }}</span>
+                                    </div>
+                                    <div class="mcont" style="display:none">
+                                        {% for item in cat.items %}
+                                            <a class="interface" href="{{ item.link }}">{{ item.label }}</a>
+                                        {% endfor %}
+                                    </div>
+                                {% endfor %}
+                            </div>
+                        {% endfor %}
+                    </td>
+                    <td class="panelinterface" id="menu-toggle">
+                        <img id="menup" src="/static/apanel/images/closed.gif" alt="{{ t(key='admin_toggle_menu') }}" />
+                    </td>
+                    <td id="section" class="bill">
+                        <div class="article">
+                            {% block content %}{% endblock %}
+                        </div>
+                    </td>
+                </tr>
+            </table>
+        </div>
+        <div id="footer">
+            <a class="up" href="#" onclick="window.scrollTo(0,0); return false;">&#9650;</a>
+            <div>Powered by <a href="http://www.danneo.com/" target="_blank">Danneo</a> 2.0 (Rust) &copy; 2026</div>
+        </div>
+    </div>
+
+    <script>
+        function logout() {
+            document.cookie = "danneo_token=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;";
+            localStorage.removeItem('danneo_token');
+            window.location.href = '/admin/login';
+        }
+    </script>
+</body>
+
+</html>

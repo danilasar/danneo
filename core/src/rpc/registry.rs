@@ -1,60 +1,30 @@
-use crate::rpc::{RpcContext, RpcError, RpcMethodDescriptor};
-use crate::state::AppState;
 use async_trait::async_trait;
+use danneo_sdk::rpc::{IRpcRegistry, RpcContext, RpcError, RpcHandler, RpcMethodDescriptor};
+use danneo_sdk::state::AppState;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
-
-#[async_trait]
-pub trait RpcHandler: Send + Sync {
-    async fn call(
-        &self,
-        method: &str,
-        payload: Value,
-        ctx: RpcContext,
-        state: Arc<AppState>,
-    ) -> Result<Value, RpcError>;
-}
-
-pub struct NativeRpcHandler {
-    module: Arc<dyn crate::module::DanneoModule>,
-}
-
-impl NativeRpcHandler {
-    pub fn new(module: Arc<dyn crate::module::DanneoModule>) -> Self {
-        Self { module }
-    }
-}
-
-#[async_trait]
-impl RpcHandler for NativeRpcHandler {
-    async fn call(
-        &self,
-        method: &str,
-        payload: Value,
-        ctx: RpcContext,
-        state: Arc<AppState>,
-    ) -> Result<Value, RpcError> {
-        self.module.call_rpc(method, payload, ctx, state).await
-    }
-}
+use tokio::sync::RwLock;
 
 pub struct RpcRegistry {
-    methods: tokio::sync::RwLock<HashMap<String, Arc<dyn RpcHandler>>>,
-    descriptors: tokio::sync::RwLock<HashMap<String, Vec<RpcMethodDescriptor>>>,
+    methods: RwLock<HashMap<String, Arc<dyn RpcHandler>>>,
+    descriptors: RwLock<HashMap<String, Vec<RpcMethodDescriptor>>>,
     max_depth: u32,
 }
 
 impl RpcRegistry {
     pub fn new() -> Self {
         Self {
-            methods: tokio::sync::RwLock::new(HashMap::new()),
-            descriptors: tokio::sync::RwLock::new(HashMap::new()),
+            methods: RwLock::new(HashMap::new()),
+            descriptors: RwLock::new(HashMap::new()),
             max_depth: 8,
         }
     }
+}
 
-    pub async fn register(
+#[async_trait]
+impl IRpcRegistry for RpcRegistry {
+    async fn register(
         &self,
         module_code: &str,
         handler: Arc<dyn RpcHandler>,
@@ -70,12 +40,12 @@ impl RpcRegistry {
             .insert(module_code.to_string(), descriptors);
     }
 
-    pub async fn unregister(&self, module_code: &str) {
+    async fn unregister(&self, module_code: &str) {
         self.methods.write().await.remove(module_code);
         self.descriptors.write().await.remove(module_code);
     }
 
-    pub async fn call(
+    async fn call(
         &self,
         target_module: &str,
         method: &str,
@@ -88,10 +58,13 @@ impl RpcRegistry {
         }
 
         // 1. Check if module is available and enabled
-        // Note: some system modules (like admin_menu itself) might be calling others during init.
-        // We'll allow "admin_menu" and "settings" to always be callable to avoid chicken-and-egg issues during bootstrap.
-        if !matches!(target_module, "admin_menu" | "settings") && !state.is_module_available(target_module).await {
-            return Err(RpcError::NotFound(format!("Module {} is disabled or not found", target_module)));
+        if !matches!(target_module, "admin_menu" | "settings" | "casbin")
+            && !state.modules.is_available(target_module).await
+        {
+            return Err(RpcError::NotFound(format!(
+                "Module {} is disabled or not found",
+                target_module
+            )));
         }
 
         let handler = {

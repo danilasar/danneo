@@ -1,6 +1,6 @@
+use crate::state::AppState;
 use std::path::PathBuf;
 use std::sync::Arc;
-use crate::state::AppState;
 
 pub struct TestRunner {
     pub module_name: String,
@@ -40,7 +40,9 @@ impl TestRunner {
                 for file in unit_tests {
                     match Self::run_unit_test_file(&file) {
                         Ok(mut file_reports) => reports.append(&mut file_reports),
-                        Err(e) => return Err(format!("Error running unit test file {:?}: {}", file, e)),
+                        Err(e) => {
+                            return Err(format!("Error running unit test file {:?}: {}", file, e));
+                        }
                     }
                 }
             }
@@ -49,9 +51,13 @@ impl TestRunner {
         if integration || run_all {
             let integration_tests = self.scan_integration_tests();
             if !integration_tests.is_empty() {
-                println!("Running integration tests for module {}...", self.module_name);
+                println!(
+                    "Running integration tests for module {}...",
+                    self.module_name
+                );
                 for file in integration_tests {
-                    let status = Self::run_integration_test_file(file.clone(), self.module_name.clone());
+                    let status =
+                        Self::run_integration_test_file(file.clone(), self.module_name.clone());
                     reports.push(TestReport {
                         name: file.to_string_lossy().to_string(),
                         status,
@@ -82,7 +88,12 @@ impl TestRunner {
             }
         }
 
-        println!("\nSummary: Total: {}, Passed: {}, Failed: {}", reports.len(), passed, failed);
+        println!(
+            "\nSummary: Total: {}, Passed: {}, Failed: {}",
+            reports.len(),
+            passed,
+            failed
+        );
 
         if failed > 0 {
             return Err(format!("{} tests failed", failed));
@@ -93,44 +104,80 @@ impl TestRunner {
 
     pub fn inject_assert(lua: &mlua::Lua) -> Result<(), mlua::Error> {
         let assert = lua.create_table()?;
-        
-        assert.set("is_true", lua.create_function(|_, val: bool| {
-            if !val { return Err(mlua::Error::RuntimeError("Assertion failed: expected true, got false".into())); }
-            Ok(())
-        })?)?;
 
-        assert.set("is_false", lua.create_function(|_, val: bool| {
-            if val { return Err(mlua::Error::RuntimeError("Assertion failed: expected false, got true".into())); }
-            Ok(())
-        })?)?;
+        assert.set(
+            "is_true",
+            lua.create_function(|_, val: bool| {
+                if !val {
+                    return Err(mlua::Error::RuntimeError(
+                        "Assertion failed: expected true, got false".into(),
+                    ));
+                }
+                Ok(())
+            })?,
+        )?;
 
-        assert.set("equals", lua.create_function(|_, (a, b): (mlua::Value, mlua::Value)| {
-            if a != b { 
-                return Err(mlua::Error::RuntimeError(format!("Assertion failed: values are not equal. Left: {:?}, Right: {:?}", a, b))); 
-            }
-            Ok(())
-        })?)?;
+        assert.set(
+            "is_false",
+            lua.create_function(|_, val: bool| {
+                if val {
+                    return Err(mlua::Error::RuntimeError(
+                        "Assertion failed: expected false, got true".into(),
+                    ));
+                }
+                Ok(())
+            })?,
+        )?;
 
-        assert.set("not_equals", lua.create_function(|_, (a, b): (mlua::Value, mlua::Value)| {
-            if a == b { 
-                return Err(mlua::Error::RuntimeError(format!("Assertion failed: values are equal. Both are: {:?}", a))); 
-            }
-            Ok(())
-        })?)?;
+        assert.set(
+            "equals",
+            lua.create_function(|_, (a, b): (mlua::Value, mlua::Value)| {
+                if a != b {
+                    return Err(mlua::Error::RuntimeError(format!(
+                        "Assertion failed: values are not equal. Left: {:?}, Right: {:?}",
+                        a, b
+                    )));
+                }
+                Ok(())
+            })?,
+        )?;
 
-        assert.set("is_nil", lua.create_function(|_, val: mlua::Value| {
-            if !matches!(val, mlua::Value::Nil) { 
-                return Err(mlua::Error::RuntimeError("Assertion failed: expected nil".into())); 
-            }
-            Ok(())
-        })?)?;
+        assert.set(
+            "not_equals",
+            lua.create_function(|_, (a, b): (mlua::Value, mlua::Value)| {
+                if a == b {
+                    return Err(mlua::Error::RuntimeError(format!(
+                        "Assertion failed: values are equal. Both are: {:?}",
+                        a
+                    )));
+                }
+                Ok(())
+            })?,
+        )?;
 
-        assert.set("is_not_nil", lua.create_function(|_, val: mlua::Value| {
-            if matches!(val, mlua::Value::Nil) { 
-                return Err(mlua::Error::RuntimeError("Assertion failed: expected not nil".into())); 
-            }
-            Ok(())
-        })?)?;
+        assert.set(
+            "is_nil",
+            lua.create_function(|_, val: mlua::Value| {
+                if !matches!(val, mlua::Value::Nil) {
+                    return Err(mlua::Error::RuntimeError(
+                        "Assertion failed: expected nil".into(),
+                    ));
+                }
+                Ok(())
+            })?,
+        )?;
+
+        assert.set(
+            "is_not_nil",
+            lua.create_function(|_, val: mlua::Value| {
+                if matches!(val, mlua::Value::Nil) {
+                    return Err(mlua::Error::RuntimeError(
+                        "Assertion failed: expected not nil".into(),
+                    ));
+                }
+                Ok(())
+            })?,
+        )?;
 
         lua.globals().set("assert", assert)?;
         Ok(())
@@ -145,7 +192,7 @@ impl TestRunner {
 
         let mut reports = Vec::new();
         let globals = lua.globals();
-        
+
         for pair in globals.pairs::<mlua::Value, mlua::Value>() {
             let (key, value) = pair.map_err(|e| e.to_string())?;
             if let mlua::Value::String(name) = key {
@@ -185,11 +232,13 @@ impl TestRunner {
     }
 
     pub async fn boot_test_environment(module_name: &str) -> Result<Arc<AppState>, String> {
-        let db = sea_orm::Database::connect("sqlite::memory:").await.map_err(|e| e.to_string())?;
-        
+        let db = sea_orm::Database::connect("sqlite::memory:")
+            .await
+            .map_err(|e| e.to_string())?;
+
         // AppState::new already runs migrations and bootstrap
-        let state = Arc::new(AppState::new(db).await?);
-        
+        let state = crate::state::init_state(db).await?;
+
         // Install the module under test if not already installed by bootstrap
         let installer = crate::registry::installer::PackageInstaller::new(
             state.db.clone(),
@@ -202,7 +251,8 @@ impl TestRunner {
 
         let module_path = PathBuf::from("modules").join(module_name);
         if module_path.exists() {
-            installer.install_from_staging(module_name, &module_path)
+            installer
+                .install_from_staging(module_name, &module_path)
                 .await
                 .map_err(|e| format!("Module installation failed: {}", e))?;
         }
@@ -211,20 +261,21 @@ impl TestRunner {
     }
 
     pub fn run_integration_test_file(path: PathBuf, module_name: String) -> TestStatus {
-        use nix::unistd::{fork, ForkResult};
         use nix::sys::wait::waitpid;
+        use nix::unistd::{ForkResult, fork};
 
         match unsafe { fork() } {
-            Ok(ForkResult::Parent { child }) => {
-                match waitpid(child, None) {
-                    Ok(nix::sys::wait::WaitStatus::Exited(_, code)) => {
-                        if code == 0 { TestStatus::Passed }
-                        else { TestStatus::Failed(format!("Child process exited with code {}", code)) }
+            Ok(ForkResult::Parent { child }) => match waitpid(child, None) {
+                Ok(nix::sys::wait::WaitStatus::Exited(_, code)) => {
+                    if code == 0 {
+                        TestStatus::Passed
+                    } else {
+                        TestStatus::Failed(format!("Child process exited with code {}", code))
                     }
-                    Ok(s) => TestStatus::Failed(format!("Child process ended unexpectedly: {:?}", s)),
-                    Err(e) => TestStatus::Failed(format!("Waitpid error: {}", e)),
                 }
-            }
+                Ok(s) => TestStatus::Failed(format!("Child process ended unexpectedly: {:?}", s)),
+                Err(e) => TestStatus::Failed(format!("Waitpid error: {}", e)),
+            },
             Ok(ForkResult::Child) => {
                 let rt = tokio::runtime::Builder::new_current_thread()
                     .enable_all()
@@ -235,13 +286,13 @@ impl TestRunner {
                     let _state = Self::boot_test_environment(&module_name).await?;
                     let lua = mlua::Lua::new();
                     Self::inject_assert(&lua).map_err(|e| e.to_string())?;
-                    
+
                     // Inject danneo API (mocked or partial)
                     // For now just basic injection
-                    
+
                     let content = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
                     lua.load(&content).exec().map_err(|e| e.to_string())?;
-                    
+
                     let globals = lua.globals();
                     for pair in globals.pairs::<mlua::Value, mlua::Value>() {
                         let (key, value) = pair.map_err(|e| e.to_string())?;
@@ -273,8 +324,8 @@ impl TestRunner {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::tempdir;
     use std::fs;
+    use tempfile::tempdir;
 
     #[tokio::test]
     async fn test_all_modules_lua_tests() {
@@ -314,8 +365,16 @@ mod tests {
         fs::create_dir_all(module_path.join("tests/unit")).unwrap();
         fs::create_dir_all(module_path.join("tests/integration")).unwrap();
 
-        fs::write(module_path.join("tests/unit/test_1.lua"), "function test_x() end").unwrap();
-        fs::write(module_path.join("tests/integration/test_db.lua"), "function test_db() end").unwrap();
+        fs::write(
+            module_path.join("tests/unit/test_1.lua"),
+            "function test_x() end",
+        )
+        .unwrap();
+        fs::write(
+            module_path.join("tests/integration/test_db.lua"),
+            "function test_db() end",
+        )
+        .unwrap();
 
         let mut runner = TestRunner::new("test_mod");
         runner.base_path = module_path; // Override for test
@@ -326,21 +385,30 @@ mod tests {
 
         let integration_tests = runner.scan_integration_tests();
         assert_eq!(integration_tests.len(), 1);
-        assert!(integration_tests[0].to_str().unwrap().contains("test_db.lua"));
+        assert!(
+            integration_tests[0]
+                .to_str()
+                .unwrap()
+                .contains("test_db.lua")
+        );
     }
 
     #[test]
     fn test_run_unit_tests_success() {
         let dir = tempdir().unwrap();
         let lua_file = dir.path().join("test_success.lua");
-        fs::write(&lua_file, r#"
+        fs::write(
+            &lua_file,
+            r#"
             function test_math()
                 assert.equals(4, 2 + 2)
             end
             function test_logic()
                 assert.is_true(true)
             end
-        "#).unwrap();
+        "#,
+        )
+        .unwrap();
 
         let reports = TestRunner::run_unit_test_file(&lua_file).unwrap();
         assert_eq!(reports.len(), 2);
@@ -351,11 +419,15 @@ mod tests {
     fn test_run_unit_tests_failure() {
         let dir = tempdir().unwrap();
         let lua_file = dir.path().join("test_fail.lua");
-        fs::write(&lua_file, r#"
+        fs::write(
+            &lua_file,
+            r#"
             function test_fail()
                 assert.equals(5, 2 + 2)
             end
-        "#).unwrap();
+        "#,
+        )
+        .unwrap();
 
         let reports = TestRunner::run_unit_test_file(&lua_file).unwrap();
         assert_eq!(reports.len(), 1);

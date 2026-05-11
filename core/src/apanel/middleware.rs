@@ -28,7 +28,9 @@ pub async fn admin_acl_middleware(
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .ok_or(StatusCode::UNAUTHORIZED)?;
 
-    let module_info = request.extensions().get::<crate::module::ModuleInfo>();
+    let module_info = request
+        .extensions()
+        .get::<danneo_sdk::models::module::ModuleInfo>();
 
     if let Some(info) = module_info {
         let module = &info.code;
@@ -45,7 +47,11 @@ pub async fn admin_acl_middleware(
             return Ok(next.run(request).await);
         }
 
-        tracing::warn!("Access denied for admin {} to module {}", admin.login, module);
+        tracing::warn!(
+            "Access denied for admin {} to module {}",
+            admin.login,
+            module
+        );
         return Err(StatusCode::FORBIDDEN);
     }
 
@@ -58,12 +64,17 @@ pub async fn module_enabled_middleware(
     request: Request,
     next: Next,
 ) -> Result<impl IntoResponse, StatusCode> {
-    let module_info = request.extensions().get::<crate::module::ModuleInfo>();
+    let module_info = request
+        .extensions()
+        .get::<danneo_sdk::models::module::ModuleInfo>();
 
     if let Some(info) = module_info {
         let module = &info.code;
-        if matches!(module.as_str(), "dashboard" | "modules" | "login" | "crud" | "menu_system") {
-             return Ok(next.run(request).await);
+        if matches!(
+            module.as_str(),
+            "dashboard" | "modules" | "login" | "crud" | "menu_system"
+        ) {
+            return Ok(next.run(request).await);
         }
 
         use crate::models::core_modules;

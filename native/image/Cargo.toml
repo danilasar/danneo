@@ -1,0 +1,23 @@
+[package]
+name = "danneo-native-image"
+version = "2.0.0"
+edition = "2024"
+
+[dependencies]
+danneo-sdk = { path = "../../danneo-sdk" }
+sea-orm.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+async-trait.workspace = true
+axum.workspace = true
+tracing.workspace = true
+image = "0.24"
+base64 = "0.21"
+chrono.workspace = true
+uuid.workspace = true
+tokio = { workspace = true, features = ["sync"] }
+sea-orm-migration.workspace = true
+
+[dev-dependencies]
+danneo-core = { path = "../../core" }
+tokio = { workspace = true, features = ["full"] }

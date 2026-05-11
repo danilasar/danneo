@@ -1,25 +1,27 @@
-use crate::registry::{PackageRegistry, ScriptEngine};
-use sea_orm::{ActiveModelTrait, DatabaseConnection, Set, PaginatorTrait, Statement, ConnectionTrait};
+use danneo_sdk::registry::{IModuleRegistry, IPackageRegistry, IRouteRegistry, IScriptEngine};
+use sea_orm::{
+    ActiveModelTrait, ConnectionTrait, DatabaseConnection, PaginatorTrait, Set, Statement,
+};
 use std::sync::Arc;
 
 use crate::state::AppState;
 
 pub struct PackageInstaller {
     db: Arc<DatabaseConnection>,
-    registry: Arc<tokio::sync::RwLock<PackageRegistry>>,
-    modules: Arc<tokio::sync::RwLock<crate::registry::ModuleRegistry>>,
-    routes: Arc<tokio::sync::RwLock<crate::registry::RouteRegistry>>,
-    script_engine: Arc<ScriptEngine>,
+    registry: Arc<dyn IPackageRegistry>,
+    modules: Arc<dyn IModuleRegistry>,
+    routes: Arc<dyn IRouteRegistry>,
+    script_engine: Arc<dyn IScriptEngine>,
     state: Arc<AppState>,
 }
 
 impl PackageInstaller {
     pub fn new(
         db: Arc<DatabaseConnection>,
-        registry: Arc<tokio::sync::RwLock<PackageRegistry>>,
-        modules: Arc<tokio::sync::RwLock<crate::registry::ModuleRegistry>>,
-        routes: Arc<tokio::sync::RwLock<crate::registry::RouteRegistry>>,
-        script_engine: Arc<ScriptEngine>,
+        registry: Arc<dyn IPackageRegistry>,
+        modules: Arc<dyn IModuleRegistry>,
+        routes: Arc<dyn IRouteRegistry>,
+        script_engine: Arc<dyn IScriptEngine>,
         state: Arc<AppState>,
     ) -> Self {
         Self {
@@ -33,22 +35,13 @@ impl PackageInstaller {
     }
 
     pub async fn refresh_registries(&self) {
-        self.registry.write().await.scan();
-        let packages_dir = self.registry.read().await.packages_dir.clone();
+        self.registry.scan().await;
+        let packages_dir = self.registry.get_packages_dir();
 
-        {
-            let modules_guard = self.modules.read().await;
-            modules_guard.admin_menus.write().await.clear();
-        }
+        self.modules.clear_admin_menus().await;
+        self.routes.clear_routes().await;
 
-        {
-            let mut routes_guard = self.routes.write().await;
-            routes_guard.frontend_routes.clear();
-            routes_guard.admin_routes.clear();
-        }
-
-        let modules_guard = self.modules.read().await;
-        modules_guard
+        self.modules
             .init(
                 self.script_engine.clone(),
                 self.routes.clone(),
@@ -62,12 +55,10 @@ impl PackageInstaller {
         use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 
         let block_manifests: Vec<_> = {
-            let registry = self.registry.read().await;
-            registry
-                .blocks
-                .values()
+            let blocks = self.registry.get_blocks().await;
+            blocks
+                .into_values()
                 .filter(|manifest| manifest.block.module_code == module_code)
-                .cloned()
                 .collect()
         };
 
@@ -120,7 +111,7 @@ impl PackageInstaller {
         let manifest_path = staging_path.join("module.toml");
         let manifest_content =
             std::fs::read_to_string(&manifest_path).map_err(|e| e.to_string())?;
-        let manifest: crate::registry::PackageManifest =
+        let manifest: danneo_sdk::registry::PackageManifest =
             toml::from_str(&manifest_content).map_err(|e| e.to_string())?;
 
         let module_code = manifest.package.id.clone();
@@ -129,10 +120,7 @@ impl PackageInstaller {
         }
 
         let now = chrono::Utc::now().into();
-        let final_path = {
-            let registry = self.registry.read().await;
-            registry.packages_dir.join(&module_code)
-        };
+        let final_path = self.registry.get_packages_dir().join(&module_code);
 
         use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
         let existing = crate::models::core_modules::Entity::find()
@@ -156,7 +144,7 @@ impl PackageInstaller {
             }
             return Err(format!("Failed to move package: {}", e));
         }
-        self.registry.write().await.scan();
+        self.registry.scan().await;
 
         let db_result: Result<(), String> = async {
             if let Some(module) = existing {
@@ -226,7 +214,7 @@ impl PackageInstaller {
                     .call_hook(
                         &module_code,
                         "on_install",
-                        script_rhai::Dynamic::UNIT,
+                        serde_json::Value::Null,
                         self.state.clone(),
                     )
                     .await;
@@ -241,15 +229,22 @@ impl PackageInstaller {
         Ok(())
     }
 
-    async fn apply_lua_migrations(&self, module_code: &str, module_dir: &std::path::Path) -> Result<(), String> {
+    async fn apply_lua_migrations(
+        &self,
+        module_code: &str,
+        module_dir: &std::path::Path,
+    ) -> Result<(), String> {
         let migrations_dir = module_dir.join("migrations");
-        if !migrations_dir.exists() { return Ok(()); }
+        if !migrations_dir.exists() {
+            return Ok(());
+        }
 
-        let mut files: Vec<_> = std::fs::read_dir(migrations_dir).map_err(|e| e.to_string())?
+        let mut files: Vec<_> = std::fs::read_dir(migrations_dir)
+            .map_err(|e| e.to_string())?
             .filter_map(|e| e.ok())
             .filter(|e| e.path().extension().map_or(false, |ext| ext == "lua"))
             .collect();
-        
+
         files.sort_by_key(|e| e.file_name());
 
         let db = self.db.as_ref();
@@ -257,25 +252,35 @@ impl PackageInstaller {
 
         for entry in files {
             let file_name = entry.file_name().to_string_lossy().to_string();
-            
+
             let (sql, values) = sea_query::Query::select()
                 .column(sea_query::Alias::new("id"))
                 .from(sea_query::Alias::new("core_lua_migrations"))
-                .and_where(sea_query::Expr::col(sea_query::Alias::new("module_code")).eq(module_code))
-                .and_where(sea_query::Expr::col(sea_query::Alias::new("migration_name")).eq(&file_name))
+                .and_where(
+                    sea_query::Expr::col(sea_query::Alias::new("module_code")).eq(module_code),
+                )
+                .and_where(
+                    sea_query::Expr::col(sea_query::Alias::new("migration_name")).eq(&file_name),
+                )
                 .build_any(match backend {
                     sea_orm::DatabaseBackend::Postgres => &sea_query::PostgresQueryBuilder,
                     sea_orm::DatabaseBackend::MySql => &sea_query::MysqlQueryBuilder,
                     sea_orm::DatabaseBackend::Sqlite => &sea_query::SqliteQueryBuilder,
                 });
 
-            let exists = db.query_one(Statement::from_sql_and_values(backend, &sql, values))
-                .await.unwrap_or(None).is_some();
+            let exists = db
+                .query_one(Statement::from_sql_and_values(backend, &sql, values))
+                .await
+                .unwrap_or(None)
+                .is_some();
 
-            if exists { continue; }
+            if exists {
+                continue;
+            }
 
             let script = std::fs::read_to_string(entry.path()).map_err(|e| e.to_string())?;
-            let wrapped_script = format!("
+            let wrapped_script = format!(
+                "
                 local mig = (function() 
                     {}
                 end)()
@@ -283,28 +288,52 @@ impl PackageInstaller {
                     return mig.up()
                 end
                 error('Migration must return a table with an up function')
-            ", script);
+            ",
+                script
+            );
 
-            self.script_engine.load_script_str(&format!("{}_mig", module_code), &wrapped_script).await.map_err(|e| e.to_string())?;
-            let _ = self.script_engine.call_hook(&format!("{}_mig", module_code), "up", script_rhai::Dynamic::UNIT, self.state.clone()).await;
+            self.script_engine
+                .load_script_str(&format!("{}_mig", module_code), &wrapped_script)
+                .await
+                .map_err(|e| e.to_string())?;
+            let _ = self
+                .script_engine
+                .call_hook(
+                    &format!("{}_mig", module_code),
+                    "up",
+                    serde_json::Value::Null,
+                    self.state.clone(),
+                )
+                .await;
 
             let (sql, values) = sea_query::Query::insert()
                 .into_table(sea_query::Alias::new("core_lua_migrations"))
-                .columns([sea_query::Alias::new("module_code"), sea_query::Alias::new("migration_name")])
+                .columns([
+                    sea_query::Alias::new("module_code"),
+                    sea_query::Alias::new("migration_name"),
+                ])
                 .values_panic([module_code.into(), file_name.into()])
                 .build_any(match backend {
                     sea_orm::DatabaseBackend::Postgres => &sea_query::PostgresQueryBuilder,
                     sea_orm::DatabaseBackend::MySql => &sea_query::MysqlQueryBuilder,
                     sea_orm::DatabaseBackend::Sqlite => &sea_query::SqliteQueryBuilder,
                 });
-            db.execute(Statement::from_sql_and_values(backend, &sql, values)).await.map_err(|e| e.to_string())?;
+            db.execute(Statement::from_sql_and_values(backend, &sql, values))
+                .await
+                .map_err(|e| e.to_string())?;
         }
         Ok(())
     }
 
-    async fn rollback_lua_migrations(&self, module_code: &str, module_dir: &std::path::Path) -> Result<(), String> {
+    async fn rollback_lua_migrations(
+        &self,
+        module_code: &str,
+        module_dir: &std::path::Path,
+    ) -> Result<(), String> {
         let migrations_dir = module_dir.join("migrations");
-        if !migrations_dir.exists() { return Ok(()); }
+        if !migrations_dir.exists() {
+            return Ok(());
+        }
 
         let db = self.db.as_ref();
         let backend = db.get_database_backend();
@@ -320,44 +349,69 @@ impl PackageInstaller {
                 sea_orm::DatabaseBackend::Sqlite => &sea_query::SqliteQueryBuilder,
             });
 
-        let rows = db.query_all(Statement::from_sql_and_values(backend, &sql, values)).await.map_err(|e| e.to_string())?;
+        let rows = db
+            .query_all(Statement::from_sql_and_values(backend, &sql, values))
+            .await
+            .map_err(|e| e.to_string())?;
 
         for row in rows {
             let file_name: String = row.try_get("", "migration_name").unwrap_or_default();
             let file_path = migrations_dir.join(&file_name);
-            
+
             if file_path.exists() {
                 let script = std::fs::read_to_string(file_path).map_err(|e| e.to_string())?;
-                let wrapped_script = format!("
+                let wrapped_script = format!(
+                    "
                     local mig = (function() 
                         {}
                     end)()
                     if mig and type(mig.down) == 'function' then
                         return mig.down()
                     end
-                ", script);
+                ",
+                    script
+                );
 
-                self.script_engine.load_script_str(&format!("{}_rollback", module_code), &wrapped_script).await.map_err(|e| e.to_string())?;
-                let _ = self.script_engine.call_hook(&format!("{}_rollback", module_code), "down", script_rhai::Dynamic::UNIT, self.state.clone()).await;
+                self.script_engine
+                    .load_script_str(&format!("{}_rollback", module_code), &wrapped_script)
+                    .await
+                    .map_err(|e| e.to_string())?;
+                let _ = self
+                    .script_engine
+                    .call_hook(
+                        &format!("{}_rollback", module_code),
+                        "down",
+                        serde_json::Value::Null,
+                        self.state.clone(),
+                    )
+                    .await;
             }
 
             let (sql, values) = sea_query::Query::delete()
                 .from_table(sea_query::Alias::new("core_lua_migrations"))
-                .and_where(sea_query::Expr::col(sea_query::Alias::new("module_code")).eq(module_code))
-                .and_where(sea_query::Expr::col(sea_query::Alias::new("migration_name")).eq(&file_name))
+                .and_where(
+                    sea_query::Expr::col(sea_query::Alias::new("module_code")).eq(module_code),
+                )
+                .and_where(
+                    sea_query::Expr::col(sea_query::Alias::new("migration_name")).eq(&file_name),
+                )
                 .build_any(match backend {
                     sea_orm::DatabaseBackend::Postgres => &sea_query::PostgresQueryBuilder,
                     sea_orm::DatabaseBackend::MySql => &sea_query::MysqlQueryBuilder,
                     sea_orm::DatabaseBackend::Sqlite => &sea_query::SqliteQueryBuilder,
                 });
-            db.execute(Statement::from_sql_and_values(backend, &sql, values)).await.ok();
+            db.execute(Statement::from_sql_and_values(backend, &sql, values))
+                .await
+                .ok();
         }
         Ok(())
     }
 
     async fn register_native_in_db(&self, module_code: &str, version: &str) -> Result<(), String> {
         use crate::models::core_modules;
-        use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, IntoActiveModel, QueryFilter, Set};
+        use sea_orm::{
+            ActiveModelTrait, ColumnTrait, EntityTrait, IntoActiveModel, QueryFilter, Set,
+        };
         let now: chrono::DateTime<chrono::FixedOffset> = chrono::Utc::now().into();
         let existing = core_modules::Entity::find()
             .filter(core_modules::Column::Code.eq(module_code))
@@ -371,7 +425,10 @@ impl PackageInstaller {
             active.enabled = Set(true);
             active.installed = Set(true);
             active.updated_at = Set(now);
-            active.update(self.db.as_ref()).await.map_err(|e| e.to_string())?;
+            active
+                .update(self.db.as_ref())
+                .await
+                .map_err(|e| e.to_string())?;
         } else {
             core_modules::ActiveModel {
                 code: Set(module_code.to_string()),
@@ -396,7 +453,7 @@ impl PackageInstaller {
     }
 
     pub async fn install(&self, package_id: &str) -> Result<(), String> {
-        let registration = inventory::iter::<crate::module::NativeModuleRegistration>()
+        let registration = inventory::iter::<danneo_sdk::module::NativeModuleRegistration>()
             .find(|r| r.name == package_id);
 
         if let Some(reg) = registration {
@@ -409,14 +466,18 @@ impl PackageInstaller {
         }
 
         let manifest = {
-            let registry = self.registry.read().await;
-            registry.packages.get(package_id).cloned()
-        }.ok_or_else(|| format!("Package {} not found", package_id))?;
+            let packages = self.registry.get_packages().await;
+            packages.get(package_id).cloned()
+        }
+        .ok_or_else(|| format!("Package {} not found", package_id))?;
 
         let mut active_modules = std::collections::HashMap::new();
         use crate::models::core_modules;
         use sea_orm::EntityTrait;
-        let installed = core_modules::Entity::find().all(self.db.as_ref()).await.unwrap_or_default();
+        let installed = core_modules::Entity::find()
+            .all(self.db.as_ref())
+            .await
+            .unwrap_or_default();
         for m in installed {
             if m.enabled {
                 if let Ok(v) = semver::Version::parse(&m.version) {
@@ -430,10 +491,16 @@ impl PackageInstaller {
                 let req = semver::VersionReq::parse(req_str).map_err(|e| e.to_string())?;
                 if let Some(found_ver) = active_modules.get(dep_id) {
                     if !req.matches(found_ver) {
-                        return Err(format!("Dependency mismatch: {} requires {}, found {}", package_id, req_str, found_ver));
+                        return Err(format!(
+                            "Dependency mismatch: {} requires {}, found {}",
+                            package_id, req_str, found_ver
+                        ));
                     }
                 } else {
-                    return Err(format!("Missing mandatory dependency: {} for {}", dep_id, package_id));
+                    return Err(format!(
+                        "Missing mandatory dependency: {} for {}",
+                        dep_id, package_id
+                    ));
                 }
             }
         }
@@ -448,8 +515,16 @@ impl PackageInstaller {
             package_id: Set(0),
             package_path: Set(format!("modules/{}", module_code)),
             package_hash: Set("temp_hash".to_string()),
-            runtime_type: Set(manifest.module.as_ref().map(|m| m.runtime_type.clone()).unwrap_or_else(|| "lua".to_string())),
-            enabled: Set(manifest.install.as_ref().and_then(|i| i.default_enabled).unwrap_or(false)),
+            runtime_type: Set(manifest
+                .module
+                .as_ref()
+                .map(|m| m.runtime_type.clone())
+                .unwrap_or_else(|| "lua".to_string())),
+            enabled: Set(manifest
+                .install
+                .as_ref()
+                .and_then(|i| i.default_enabled)
+                .unwrap_or(false)),
             installed: Set(true),
             manifest: Set(serde_json::to_value(&manifest).map_err(|e| e.to_string())?),
             installed_at: Set(now),
@@ -457,19 +532,30 @@ impl PackageInstaller {
             ..Default::default()
         };
 
-        module_model.insert(self.db.as_ref()).await.map_err(|e| e.to_string())?;
-        let module_dir = {
-            let registry = self.registry.read().await;
-            registry.packages_dir.join(&module_code)
-        };
+        module_model
+            .insert(self.db.as_ref())
+            .await
+            .map_err(|e| e.to_string())?;
+        let module_dir = self.registry.get_packages_dir().join(&module_code);
 
         self.apply_lua_migrations(&module_code, &module_dir).await?;
 
         if let Some(entry) = manifest.entrypoints.as_ref() {
             if let Some(hooks_path) = &entry.hooks {
                 let full_hooks_path = module_dir.join(hooks_path);
-                let _ = self.script_engine.load_module_scripts(&module_code, &full_hooks_path).await;
-                let _ = self.script_engine.call_hook(&module_code, "on_install", script_rhai::Dynamic::UNIT, self.state.clone()).await;
+                let _ = self
+                    .script_engine
+                    .load_module_scripts(&module_code, &full_hooks_path)
+                    .await;
+                let _ = self
+                    .script_engine
+                    .call_hook(
+                        &module_code,
+                        "on_install",
+                        serde_json::Value::Null,
+                        self.state.clone(),
+                    )
+                    .await;
             }
         }
         self.install_module_blocks(&module_code).await?;
@@ -478,27 +564,35 @@ impl PackageInstaller {
     }
 
     pub async fn uninstall(&self, package_id: &str) -> Result<(), String> {
-        let registration = inventory::iter::<crate::module::NativeModuleRegistration>()
+        let registration = inventory::iter::<danneo_sdk::module::NativeModuleRegistration>()
             .find(|r| r.name == package_id);
-        
+
         if let Some(reg) = registration {
-             let module = (reg.factory)(self.db.clone());
-             module.on_uninstall(self.state.clone()).await?;
+            let module = (reg.factory)(self.db.clone());
+            module.on_uninstall(self.state.clone()).await?;
         }
 
-        let module_dir = {
-            let registry = self.registry.read().await;
-            registry.packages_dir.join(package_id)
-        };
+        let module_dir = self.registry.get_packages_dir().join(package_id);
 
-        self.rollback_lua_migrations(package_id, &module_dir).await.ok();
-        let _ = self.script_engine.call_hook(package_id, "on_uninstall", script_rhai::Dynamic::UNIT, self.state.clone()).await;
+        self.rollback_lua_migrations(package_id, &module_dir)
+            .await
+            .ok();
+        let _ = self
+            .script_engine
+            .call_hook(
+                package_id,
+                "on_uninstall",
+                serde_json::Value::Null,
+                self.state.clone(),
+            )
+            .await;
 
         use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
         crate::models::core_modules::Entity::delete_many()
             .filter(crate::models::core_modules::Column::Code.eq(package_id))
             .exec(self.db.as_ref())
-            .await.ok();
+            .await
+            .ok();
 
         self.refresh_registries().await;
         Ok(())
@@ -506,10 +600,10 @@ impl PackageInstaller {
 
     pub async fn bootstrap(&self) -> Result<(), String> {
         use crate::models::core_modules;
-        use sea_orm::{ConnectionTrait, Statement, EntityTrait, ColumnTrait, QueryFilter};
+        use sea_orm::{ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, Statement};
         let db = self.db.as_ref();
         let backend = db.get_database_backend();
-        use sea_query::{Alias, Query, Expr};
+        use sea_query::{Alias, Expr, Query};
 
         let (sql, values) = Query::select()
             .column(Alias::new("value"))
@@ -521,24 +615,31 @@ impl PackageInstaller {
                 sea_orm::DatabaseBackend::Sqlite => &sea_query::SqliteQueryBuilder,
             });
 
-        let bootstrapped_row = db.query_one(Statement::from_sql_and_values(backend, &sql, values)).await;
-        
+        let bootstrapped_row = db
+            .query_one(Statement::from_sql_and_values(backend, &sql, values))
+            .await;
+
         match bootstrapped_row {
             Ok(Some(row)) => {
-                 let val: String = row.try_get("", "value").unwrap_or_default();
-                 if val == "true" { return Ok(()); }
-            },
+                let val: String = row.try_get("", "value").unwrap_or_default();
+                if val == "true" {
+                    return Ok(());
+                }
+            }
             _ => {}
         }
-        
+
         let core_modules = vec![
             "admin_menu".to_string(),
             "settings".to_string(),
             "design".to_string(),
             "blocks".to_string(),
             "seo".to_string(),
+            "image".to_string(),
+            "casbin".to_string(),
             "security".to_string(),
             "storage".to_string(),
+            "native_demo".to_string(),
             "mod_media".to_string(),
             "mod_menu".to_string(),
         ];
@@ -559,14 +660,20 @@ impl PackageInstaller {
             .into_table(Alias::new("core_system_state"))
             .columns([Alias::new("key"), Alias::new("value")])
             .values_panic(["is_bootstrapped".into(), "true".into()])
-            .on_conflict(sea_query::OnConflict::column(Alias::new("key")).update_column(Alias::new("value")).to_owned())
+            .on_conflict(
+                sea_query::OnConflict::column(Alias::new("key"))
+                    .update_column(Alias::new("value"))
+                    .to_owned(),
+            )
             .build_any(match backend {
                 sea_orm::DatabaseBackend::Postgres => &sea_query::PostgresQueryBuilder,
                 sea_orm::DatabaseBackend::MySql => &sea_query::MysqlQueryBuilder,
                 sea_orm::DatabaseBackend::Sqlite => &sea_query::SqliteQueryBuilder,
             });
 
-        let _ = db.execute(Statement::from_sql_and_values(backend, &sql, values)).await;
+        let _ = db
+            .execute(Statement::from_sql_and_values(backend, &sql, values))
+            .await;
         Ok(())
     }
 }

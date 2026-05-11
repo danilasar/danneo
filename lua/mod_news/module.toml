@@ -1,0 +1,42 @@
+[package]
+id = "mod_news"
+name = "News Module"
+version = "1.0.0"
+description = "Full featured news module with categories and articles"
+type = "module"
+
+[module]
+runtime_type = "lua"
+
+[dependencies]
+settings = ">=2.0.0"
+
+[entrypoints]
+hooks = "scripts/hooks.lua"
+
+[[admin_routes]]
+name = "list"
+method = "GET"
+path = "/news"
+handler = "list"
+
+[[admin_routes]]
+name = "add"
+method = "GET"
+path = "/news/add"
+handler = "add"
+
+[[frontend_routes]]
+name = "news_list"
+method = "GET"
+path = "/news"
+handler = "script"
+
+[[frontend_routes]]
+name = "news_view"
+method = "GET"
+path = "/news/:id"
+handler = "script"
+
+[install]
+default_enabled = true

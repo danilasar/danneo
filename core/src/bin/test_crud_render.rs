@@ -1,7 +1,5 @@
-use danneo_core::state::AppState;
 use sea_orm::Database;
 use serde_json::json;
-use std::sync::Arc;
 use tera::Context;
 
 #[tokio::main]
@@ -9,7 +7,7 @@ async fn main() {
     let db = Database::connect("sqlite::memory:").await.unwrap();
     use sea_orm_migration::MigratorTrait;
     migration::Migrator::up(&db, None).await.unwrap();
-    let state = Arc::new(AppState::new(db).await.unwrap());
+    let state = danneo_core::state::init_state(db).await.unwrap();
 
     let mut ctx = Context::new();
     danneo_core::apanel::prepare_admin_context(state.clone(), &mut ctx).await;

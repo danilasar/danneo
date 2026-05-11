@@ -1,0 +1,43 @@
+{% extends "apanel/base.html" %}
+
+{% block content %}
+<div class="section">
+    <div style="margin-bottom:10px;">
+        <a href="/admin/security/admins/edit" class="interface">Добавить нового администратора</a>
+    </div>
+
+    <table class="work">
+        <caption>Список администраторов</caption>
+        <tr>
+            <th class="w-16">ID</th>
+            <th>Логин</th>
+            <th>Email</th>
+            <th class="ac">Уровень (MAC)</th>
+            <th class="ac">Действие</th>
+        </tr>
+        {% for admin in admins %}
+        <tr>
+            <td class="ac">{{ admin.id }}</td>
+            <td class="al">
+                <strong>{{ admin.login }}</strong>
+                {% if admin.id == 1 %}
+                <span style="color:red; font-size:10px; margin-left:5px;">[SUPER]</span>
+                {% endif %}
+            </td>
+            <td class="al">{{ admin.email | default(value="-") }}</td>
+            <td class="ac">
+                <span style="padding: 2px 6px; border: 1px solid #ccc; background: #f9f9f9; border-radius: 3px;">
+                    {{ admin.level }}
+                </span>
+            </td>
+            <td class="ac">
+                <a href="/admin/security/admins/edit?id={{ admin.id }}">Изменить</a>
+                {% if admin.id != 1 %}
+                | <a href="/admin/security/admins/delete?id={{ admin.id }}" class="confirm-delete" style="color:#c00;">Удалить</a>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+</div>
+{% endblock %}

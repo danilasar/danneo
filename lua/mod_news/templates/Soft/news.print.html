@@ -1,0 +1,15 @@
+<div id="print">
+    <div class="printrow">
+        {{ time }} 
+        <div class="title">{{ title }}</div>
+        <div class="text">
+            {% if image %}{{ image | safe }}{% endif %}
+            {{ text | safe }}
+        </div>
+    </div>
+    <div class="printline">
+        <p>{{ copytext }}</p>
+        <p>{{ print_notice }}</p>
+    </div>
+    <p>{{ url }}</p>
+</div>

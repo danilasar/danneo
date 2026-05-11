@@ -1,13 +1,22 @@
 #[macro_use]
 extern crate rust_i18n;
+extern crate danneo_native_admin_menu;
+extern crate danneo_native_blocks;
+extern crate danneo_native_casbin;
+extern crate danneo_native_demo;
+extern crate danneo_native_design;
+extern crate danneo_native_image;
+extern crate danneo_native_security;
+extern crate danneo_native_seo;
+extern crate danneo_native_settings;
+extern crate danneo_native_storage;
 
 pub use inventory;
 
-pub mod acl;
 pub mod apanel;
 pub mod auth;
-pub mod cli;
 pub mod blocks;
+pub mod cli;
 pub mod crud;
 pub mod frontend;
 pub mod models;
@@ -37,11 +46,9 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let db_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
     let db = Database::connect(db_url).await?;
 
-    let app_state = Arc::new(
-        state::AppState::new(db)
-            .await
-            .map_err(|e| format!("Failed to initialize AppState: {}", e))?,
-    );
+    let app_state = state::init_state(db)
+        .await
+        .map_err(|e| format!("Failed to initialize AppState: {}", e))?;
 
     // 1. Настройка роутера админки (Admin Panel)
     let mut admin_routes = Router::new()
@@ -58,28 +65,7 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
             post(apanel::modules::uninstall_module),
         )
         .route("/modules/enable", post(apanel::modules::enable_module))
-        .route("/modules/disable", post(apanel::modules::disable_module));
-
-    // Dynamic Discovery of Admin Routes from all modules (Native & Lua)
-    {
-        let modules_guard = app_state.modules.read().await;
-        let active_modules = modules_guard.native_modules.read().await;
-        for (name, module) in active_modules.iter() {
-            let path = format!("/{}", name);
-            let name_clone = name.clone();
-            let module_router = module.register_admin_routes()
-                .layer(axum::middleware::from_fn(move |mut req: axum::extract::Request, next: axum::middleware::Next| {
-                    let code = name_clone.clone();
-                    async move {
-                        req.extensions_mut().insert(crate::module::ModuleInfo { code });
-                        next.run(req).await
-                    }
-                }));
-            admin_routes = admin_routes.nest(&path, module_router);
-        }
-    }
-
-    admin_routes = admin_routes
+        .route("/modules/disable", post(apanel::modules::disable_module))
         .route("/crud/:module/:entity/list", get(apanel::crud::list_page))
         .route("/crud/:module/:entity/edit", get(apanel::crud::edit_page))
         .route(
@@ -96,12 +82,36 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
         )
         .route("/crud/:module/:entity/:action", get(apanel::crud::handle))
         // Fallback for clean URLs (legacy)
-        .fallback(apanel::modules::dispatch_admin_clean);
+        .fallback(apanel::modules::dispatch_admin_clean)
+        .with_state(app_state.clone());
+
+    // Dynamic Discovery of Admin Routes from all modules (Native & Lua)
+    {
+        let active_modules = app_state.modules.get_native_modules().await;
+        for (name, module) in active_modules.iter() {
+            let path = format!("/{}", name);
+            let name_clone = name.clone();
+            let module_router =
+                module
+                    .register_admin_routes(app_state.clone())
+                    .layer(axum::middleware::from_fn(
+                        move |mut req: axum::extract::Request, next: axum::middleware::Next| {
+                            let code = name_clone.clone();
+                            async move {
+                                req.extensions_mut()
+                                    .insert(danneo_sdk::models::module::ModuleInfo { code });
+                                next.run(req).await
+                            }
+                        },
+                    ));
+            admin_routes = admin_routes.nest(&path, module_router);
+        }
+    }
 
     // Apply Modular Middleware
+
     {
-        let modules_guard = app_state.modules.read().await;
-        let active_modules = modules_guard.native_modules.read().await;
+        let active_modules = app_state.modules.get_native_modules().await;
         for module in active_modules.values() {
             admin_routes = module.register_admin_middleware(admin_routes, app_state.clone());
         }
@@ -116,26 +126,30 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
     // Dynamic Discovery of Site Routes from all modules
     let mut site_routes = Router::new();
     {
-        let modules_guard = app_state.modules.read().await;
-        let active_modules = modules_guard.native_modules.read().await;
+        let active_modules = app_state.modules.get_native_modules().await;
         for (name, module) in active_modules.iter() {
             let name_clone = name.clone();
-            let module_router = module.register_routes()
-                .layer(axum::middleware::from_fn(move |mut req: axum::extract::Request, next: axum::middleware::Next| {
-                    let code = name_clone.clone();
-                    async move {
-                        req.extensions_mut().insert(crate::module::ModuleInfo { code });
-                        next.run(req).await
-                    }
-                }));
+            let module_router =
+                module
+                    .register_routes(app_state.clone())
+                    .layer(axum::middleware::from_fn(
+                        move |mut req: axum::extract::Request, next: axum::middleware::Next| {
+                            let code = name_clone.clone();
+                            async move {
+                                req.extensions_mut()
+                                    .insert(danneo_sdk::models::module::ModuleInfo { code });
+                                next.run(req).await
+                            }
+                        },
+                    ));
             site_routes = site_routes.merge(module_router);
         }
     }
 
-    let packages_dir = if std::path::Path::new("modules").exists() {
-        "modules"
+    let packages_dir = if std::path::Path::new("lua").exists() {
+        "lua"
     } else {
-        "core/modules"
+        "core/lua"
     };
 
     let static_dir = if std::path::Path::new("core/static").exists() {
@@ -175,7 +189,8 @@ async fn root(State(state): State<Arc<state::AppState>>) -> impl axum::response:
     let settings = state.settings.read().await;
     let theme = settings.site_temp.clone();
 
-    let welcome_html = format!(r#"
+    let welcome_html = format!(
+        r#"
         <style>
             .welcome-container {{ padding: 40px 20px; text-align: center; }}
             .welcome-container h1 {{ font-size: 2.5em; color: #1a73e8; margin-bottom: 20px; }}
@@ -188,7 +203,9 @@ async fn root(State(state): State<Arc<state::AppState>>) -> impl axum::response:
             <p>Это модернизированная версия легендарной Danneo CMS. Ваша система полностью настроена и готова к работе.</p>
             <a href="/admin/dashboard" class="welcome-btn">Перейти в панель управления</a>
         </div>
-    "#, settings.site_name);
+    "#,
+        settings.site_name
+    );
 
     context.insert("welcome_text", &welcome_html);
 
@@ -197,7 +214,10 @@ async fn root(State(state): State<Arc<state::AppState>>) -> impl axum::response:
         Ok(html) => axum::response::Html(html),
         Err(e) => {
             tracing::error!("Template error ({}): {}", template_name, e);
-            axum::response::Html(format!("<h1>System Error</h1><p>Theme template <b>{}</b> not found or invalid.</p><pre>{}</pre>", template_name, e))
+            axum::response::Html(format!(
+                "<h1>System Error</h1><p>Theme template <b>{}</b> not found or invalid.</p><pre>{}</pre>",
+                template_name, e
+            ))
         }
     }
 }

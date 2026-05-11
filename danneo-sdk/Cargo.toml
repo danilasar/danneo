@@ -1,0 +1,29 @@
+[package]
+name = "danneo-sdk"
+version = "2.0.0"
+edition = "2024"
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+async-trait.workspace = true
+sea-orm.workspace = true
+mlua.workspace = true
+thiserror = "2.0.18"
+tracing.workspace = true
+axum.workspace = true
+tera.workspace = true
+casbin.workspace = true
+sea-orm-adapter.workspace = true
+inventory = "0.3"
+uuid.workspace = true
+sea-orm-migration = { workspace = true }
+danneo-macros = { path = "../danneo-macros" }
+tokio = { workspace = true, features = ["sync"] }
+jsonwebtoken.workspace = true
+tempfile.workspace = true
+slug.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["full"] }

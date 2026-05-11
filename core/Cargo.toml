@@ -10,6 +10,17 @@ tower-http.workspace = true
 sea-orm.workspace = true
 sea-orm-migration.workspace = true
 migration = { path = "../migration" }
+danneo-sdk = { path = "../danneo-sdk" }
+danneo-native-admin-menu = { path = "../native/admin_menu" }
+danneo-native-blocks = { path = "../native/blocks" }
+danneo-native-casbin = { path = "../native/casbin" }
+danneo-native-design = { path = "../native/design" }
+danneo-native-image = { path = "../native/image" }
+danneo-native-demo = { path = "../native/native-demo" }
+danneo-native-security = { path = "../native/security" }
+danneo-native-seo = { path = "../native/seo" }
+danneo-native-settings = { path = "../native/settings" }
+danneo-native-storage = { path = "../native/storage" }
 serde.workspace = true
 serde_json.workspace = true
 tera.workspace = true

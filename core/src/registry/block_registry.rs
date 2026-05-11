@@ -1,37 +1,81 @@
 use crate::blocks::{BlockContext, DanneoBlock};
 use crate::models::core_block_definitions;
 use crate::module::DanneoModule;
-use crate::registry::ScriptEngine;
+use async_trait::async_trait;
+use danneo_sdk::registry::{IBlockRegistry, IScriptEngine};
 use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
+use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
+use tera::Tera;
 
 pub struct BlockRegistry {
     pub db: Arc<DatabaseConnection>,
-    pub script_engine: Arc<ScriptEngine>,
-    renderers: HashMap<&'static str, Box<dyn DanneoBlock>>,
+    pub script_engine: Arc<dyn IScriptEngine>,
+    renderers: Arc<tokio::sync::RwLock<HashMap<&'static str, Box<dyn DanneoBlock>>>>,
+}
+
+#[async_trait]
+impl danneo_sdk::registry::IBlockRegistry for BlockRegistry {
+    async fn render_block(
+        &self,
+        block_code: &str,
+        ctx: Arc<dyn std::any::Any + Send + Sync>,
+        settings: Option<Value>,
+        tera: &Tera,
+    ) -> Option<String> {
+        let block_ctx = ctx.downcast::<crate::blocks::BlockContext>().ok()?;
+        self.render_block(block_code, block_ctx, settings, tera)
+            .await
+    }
+
+    async fn get_all_positions_html(
+        &self,
+        ctx: Arc<dyn std::any::Any + Send + Sync>,
+        tera: &Tera,
+    ) -> std::collections::HashMap<String, String> {
+        if let Ok(block_ctx) = ctx.downcast::<crate::blocks::BlockContext>() {
+            self.get_all_positions_html(block_ctx, tera).await
+        } else {
+            std::collections::HashMap::new()
+        }
+    }
 }
 
 impl BlockRegistry {
-    pub fn new(db: Arc<DatabaseConnection>, script_engine: Arc<ScriptEngine>) -> Self {
-        let mut registry = Self {
+    pub fn new(db: Arc<DatabaseConnection>, script_engine: Arc<dyn IScriptEngine>) -> Self {
+        let mut renderers: HashMap<&'static str, Box<dyn DanneoBlock>> = HashMap::new();
+        // Register native renderers
+        let sample = Box::new(crate::blocks::SampleBlock);
+        renderers.insert(sample.identifier(), sample);
+
+        Self {
             db,
             script_engine,
-            renderers: HashMap::new(),
-        };
-        // Register native renderers
-        registry.register(Box::new(crate::blocks::SampleBlock));
-        registry
+            renderers: Arc::new(tokio::sync::RwLock::new(renderers)),
+        }
     }
 
-    pub fn register(&mut self, block: Box<dyn DanneoBlock>) {
-        self.renderers.insert(block.identifier(), block);
+    pub fn register_sync(&self, block: Box<dyn DanneoBlock>) {
+        // This is tricky because we can't await in new().
+        // But for native ones we can use blocking_write or just handle it differently.
+        self.renderers
+            .blocking_write()
+            .insert(block.identifier(), block);
+    }
+
+    pub async fn register(&self, block: Box<dyn DanneoBlock>) {
+        self.renderers
+            .write()
+            .await
+            .insert(block.identifier(), block);
     }
 
     pub async fn init(&self, native_modules: HashMap<String, Arc<dyn DanneoModule>>) {
         use sea_orm::{ActiveModelTrait, Set};
 
-        for &identifier in self.renderers.keys() {
+        let renderers_guard = self.renderers.read().await;
+        for &identifier in renderers_guard.keys() {
             let exists = core_block_definitions::Entity::find()
                 .filter(core_block_definitions::Column::BlockCode.eq(identifier))
                 .one(self.db.as_ref())
@@ -146,23 +190,21 @@ impl BlockRegistry {
         &self,
         module_code: &str,
         block_code: &str,
-        response: script_rhai::Dynamic,
+        response: serde_json::Value,
         ctx: Arc<BlockContext>,
         settings: Option<serde_json::Value>,
         tera: &tera::Tera,
     ) -> Option<String> {
-        if let Some(html) = response.clone().try_cast::<String>() {
-            return Some(html);
+        if let Some(html) = response.as_str() {
+            return Some(html.to_string());
         }
 
-        let res_map = response.try_cast::<script_rhai::Map>()?;
-        let template = res_map
-            .get("template")
-            .and_then(|v| v.clone().into_string().ok())?;
+        let res_map = response.as_object()?;
+        let template = res_map.get("template").and_then(|v| v.as_str())?;
         let context_val = res_map
             .get("context")
             .cloned()
-            .unwrap_or_else(|| script_rhai::Dynamic::from(script_rhai::Map::new()));
+            .unwrap_or_else(|| serde_json::Value::Object(serde_json::Map::new()));
 
         let mut context = tera::Context::new();
         {
@@ -176,9 +218,7 @@ impl BlockRegistry {
             context.insert("settings", &settings);
         }
 
-        if let Ok(ctx_json) = script_rhai::serde::from_dynamic::<serde_json::Value>(&context_val) {
-            Self::insert_json_object(&mut context, &ctx_json);
-        }
+        Self::insert_json_object(&mut context, &context_val);
 
         let full_template_path = self
             .resolve_module_template(&ctx, tera, module_code, block_code, &template)
@@ -209,19 +249,18 @@ impl BlockRegistry {
         match definition.renderer_type.as_str() {
             "native" => {
                 if let Some(module_code) = definition.module_code.as_deref() {
-                    let modules_guard = ctx.state.modules.read().await;
-                    let native_modules = modules_guard.native_modules.read().await;
+                    let native_modules = ctx.state.modules.get_native_modules().await;
                     if let Some(module) = native_modules.get(module_code) {
-                        let settings = ctx.state.settings.clone();
-                        if let Some(html) = module
-                            .render_block(block_code, ctx.clone(), settings)
-                            .await
+                        let ctx_any: Arc<dyn std::any::Any + Send + Sync> = Arc::new(ctx.clone());
+                        let settings_any: Arc<dyn std::any::Any + Send + Sync> =
+                            Arc::new(ctx.state.settings.clone());
+                        if let Some(html) =
+                            module.render_block(block_code, ctx_any, settings_any).await
                         {
-
                             return Some(html);
                         }
                     }
-                } else if let Some(renderer) = self.renderers.get(block_code) {
+                } else if let Some(renderer) = self.renderers.read().await.get(block_code) {
                     return Some(renderer.render(ctx, settings).await);
                 }
             }
@@ -231,11 +270,10 @@ impl BlockRegistry {
                     "block_code": block_code,
                     "settings": settings,
                 });
-                let dynamic_arg = script_rhai::serde::to_dynamic(arg).unwrap();
 
                 match self
                     .script_engine
-                    .call_hook(module_code, "render_block", dynamic_arg, ctx.state.clone())
+                    .call_hook(module_code, "render_block", arg, ctx.state.clone())
                     .await
                 {
                     Ok(res) => {

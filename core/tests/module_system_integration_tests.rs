@@ -50,41 +50,37 @@ async fn test_module_db_api_isolation() {
 
     // Setup both
     let _ = engine
-        .call_hook("mod1", "setup", Dynamic::UNIT, state.clone())
+        .call_hook("mod1", "setup", serde_json::Value::Null, state.clone())
         .await
         .unwrap();
     let _ = engine
-        .call_hook("mod2", "setup", Dynamic::UNIT, state.clone())
+        .call_hook("mod2", "setup", serde_json::Value::Null, state.clone())
         .await
         .unwrap();
 
     // Verify mod1 sees its data
-    let res1 = engine
-        .call_hook("mod1", "get_items", Dynamic::UNIT, state.clone())
+    let items1 = engine
+        .call_hook("mod1", "get_items", serde_json::Value::Null, state.clone())
         .await
         .unwrap();
-    let items1: serde_json::Value = script_rhai::serde::from_dynamic(&res1).unwrap();
     assert_eq!(items1[0]["val"], "from mod1");
 
     // Verify mod2 sees its data
-    let res2 = engine
-        .call_hook("mod2", "get_items", Dynamic::UNIT, state.clone())
+    let items2 = engine
+        .call_hook("mod2", "get_items", serde_json::Value::Null, state.clone())
         .await
         .unwrap();
-    let items2: serde_json::Value = script_rhai::serde::from_dynamic(&res2).unwrap();
     assert_eq!(items2[0]["val"], "from mod2");
 
     // Verify physical tables exist with prefixes
     use sea_orm::ConnectionTrait;
     let backend = db_arc.get_database_backend();
-    let stmt1 =
-        sea_orm::Statement::from_string(backend, "SELECT val FROM mod1_items WHERE id=1");
+    let stmt1 = sea_orm::Statement::from_string(backend, "SELECT val FROM mod1_items WHERE id=1");
     let row1 = db_arc.query_one(stmt1).await.unwrap().unwrap();
     let v1: String = row1.try_get("", "val").unwrap();
     assert_eq!(v1, "from mod1");
 
-    let stmt2 =
-        sea_orm::Statement::from_string(backend, "SELECT val FROM mod2_items WHERE id=1");
+    let stmt2 = sea_orm::Statement::from_string(backend, "SELECT val FROM mod2_items WHERE id=1");
     let row2 = db_arc.query_one(stmt2).await.unwrap().unwrap();
     let v2: String = row2.try_get("", "val").unwrap();
     assert_eq!(v2, "from mod2");
@@ -114,11 +110,10 @@ async fn test_db_update_delete() {
     "#;
 
     engine.load_script_str("test_mod", script).await.unwrap();
-    let res = engine
-        .call_hook("test_mod", "test", Dynamic::UNIT, state.clone())
+    let arr = engine
+        .call_hook("test_mod", "test", serde_json::Value::Null, state.clone())
         .await
         .unwrap();
-    let arr = res.try_cast::<script_rhai::Array>().unwrap();
-    assert_eq!(arr[0].to_string(), "updated");
-    assert_eq!(arr[1].as_int().unwrap(), 0);
+    assert_eq!(arr[0].as_str().unwrap(), "updated");
+    assert_eq!(arr[1].as_i64().unwrap(), 0);
 }

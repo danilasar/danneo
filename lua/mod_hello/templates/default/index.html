@@ -1,0 +1,9 @@
+<h1>Greetings from Hello Module</h1>
+<ul>
+{% for item in items %}
+    <li>{{ item.message }} {% if item.is_polite %}(Polite){% endif %}</li>
+{% else %}
+    <li>No greetings found. Add some in the Admin Panel!</li>
+{% endfor %}
+</ul>
+<p><a href="/">Back to home</a></p>

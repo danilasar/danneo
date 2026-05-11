@@ -1,0 +1,10 @@
+[package]
+id = "native_demo"
+type = "module"
+version = "1.0.0"
+name = "Native Demo Module"
+description = "A module implemented in native Rust code"
+author = "Gemini CLI"
+
+[module]
+runtime_type = "native"

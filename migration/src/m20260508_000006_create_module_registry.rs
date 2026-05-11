@@ -31,11 +31,27 @@ impl MigrationTrait for Migration {
                     )
                     .col(ColumnDef::new(Alias::new("name")).string().not_null())
                     .col(ColumnDef::new(Alias::new("version")).string().not_null())
-                    .col(ColumnDef::new(Alias::new("package_id")).integer().not_null())
-                    .col(ColumnDef::new(Alias::new("package_path")).string().not_null())
-                    .col(ColumnDef::new(Alias::new("package_hash")).string().not_null())
+                    .col(
+                        ColumnDef::new(Alias::new("package_id"))
+                            .integer()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(Alias::new("package_path"))
+                            .string()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(Alias::new("package_hash"))
+                            .string()
+                            .not_null(),
+                    )
                     .col(ColumnDef::new(Alias::new("package_signature")).string())
-                    .col(ColumnDef::new(Alias::new("runtime_type")).string().not_null())
+                    .col(
+                        ColumnDef::new(Alias::new("runtime_type"))
+                            .string()
+                            .not_null(),
+                    )
                     .col(
                         ColumnDef::new(Alias::new("enabled"))
                             .boolean()
@@ -67,7 +83,11 @@ impl MigrationTrait for Migration {
                             .default(false),
                     )
                     .col(ColumnDef::new(Alias::new("theme")).string())
-                    .col(ColumnDef::new(Alias::new("manifest")).json_binary().not_null())
+                    .col(
+                        ColumnDef::new(Alias::new("manifest"))
+                            .json_binary()
+                            .not_null(),
+                    )
                     .col(ColumnDef::new(Alias::new("settings")).json_binary())
                     .col(ColumnDef::new(Alias::new("capabilities")).json_binary())
                     .col(
@@ -75,7 +95,11 @@ impl MigrationTrait for Migration {
                             .date_time()
                             .not_null(),
                     )
-                    .col(ColumnDef::new(Alias::new("updated_at")).date_time().not_null())
+                    .col(
+                        ColumnDef::new(Alias::new("updated_at"))
+                            .date_time()
+                            .not_null(),
+                    )
                     .to_owned(),
             )
             .await?;

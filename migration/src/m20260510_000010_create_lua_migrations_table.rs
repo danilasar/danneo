@@ -23,8 +23,16 @@ impl MigrationTrait for Migration {
                             .auto_increment()
                             .primary_key(),
                     )
-                    .col(ColumnDef::new(Alias::new("module_code")).string().not_null())
-                    .col(ColumnDef::new(Alias::new("migration_name")).string().not_null())
+                    .col(
+                        ColumnDef::new(Alias::new("module_code"))
+                            .string()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(Alias::new("migration_name"))
+                            .string()
+                            .not_null(),
+                    )
                     .col(
                         ColumnDef::new(Alias::new("applied_at"))
                             .date_time()
@@ -40,7 +48,11 @@ impl MigrationTrait for Migration {
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
         manager
-            .drop_table(Table::drop().table(Alias::new("core_lua_migrations")).to_owned())
+            .drop_table(
+                Table::drop()
+                    .table(Alias::new("core_lua_migrations"))
+                    .to_owned(),
+            )
             .await?;
 
         Ok(())

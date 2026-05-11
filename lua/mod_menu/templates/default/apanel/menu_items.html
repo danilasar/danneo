@@ -1,0 +1,140 @@
+{% extends "apanel/base.html" %}
+
+{% block content %}
+<div class="section">
+    <div style="margin-bottom:10px;">
+        <a href="/admin/menu" class="interface">Вернуться к списку групп</a>
+    </div>
+
+    <!-- Список пунктов меню -->
+    <table class="work">
+        <caption>Пункты меню: {{ group.title }}</caption>
+        <tr>
+            <th>ID</th>
+            <th>Название</th>
+            <th>Ссылка</th>
+            <th>Порядок</th>
+            <th>Доступ</th>
+            <th>Действие</th>
+        </tr>
+        {% for item in items %}
+        <tr>
+            <td class="ac">{{ item.id }}</td>
+            <td class="al">
+                {% if item.parent_id > 0 %}&nbsp;&nbsp;&mdash; {% endif %}
+                {{ item.title }}
+            </td>
+            <td class="al"><code>{{ item.link }}</code></td>
+            <td class="ac">{{ item.posit }}</td>
+            <td class="ac">{{ item.acc }}</td>
+            <td class="ac">
+                <a href="javascript:void(0)" class="edit-link" data-json='{{ item | json_encode | safe }}' onclick="edit_item(this)">Изменить</a> |
+                <a href="/admin/menu/item/delete?id={{ item.id }}&group_id={{ group.id }}" onclick="return confirm('Удалить пункт меню?')">Удалить</a>
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+
+    <br>
+
+    <!-- Форма добавления/редактирования пункта -->
+    <form action="/admin/menu/item/save" method="post" name="itemform">
+        <input type="hidden" name="id" id="item_id">
+        <input type="hidden" name="group_id" value="{{ group.id }}">
+        <table class="work">
+            <caption id="form_caption">Добавить новый пункт</caption>
+            <tr>
+                <td class="ar" style="width:30%">Родительский пункт:</td>
+                <td class="al">
+                    <select name="parent_id" id="item_parent">
+                        <option value="0">-- Корень --</option>
+                        {% for p in items %}
+                            {% if p.parent_id == 0 %}
+                            <option value="{{ p.id }}">{{ p.title }}</option>
+                            {% endif %}
+                        {% endfor %}
+                    </select>
+                </td>
+            </tr>
+            <tr>
+                <td class="ar">Заголовок:</td>
+                <td class="al">
+                    <input type="text" name="title" id="item_title" size="40" required>
+                </td>
+            </tr>
+            <tr>
+                <td class="ar">Ссылка (URL):</td>
+                <td class="al">
+                    <input type="text" name="link" id="item_link" size="50" required>
+                    <br><small>Например: /news, http://google.com, index.php?mod=news</small>
+                </td>
+            </tr>
+            <tr>
+                <td class="ar">Окно (Target):</td>
+                <td class="al">
+                    <select name="target" id="item_target">
+                        <option value="_self">В текущем окне (_self)</option>
+                        <option value="_blank">В новом окне (_blank)</option>
+                    </select>
+                </td>
+            </tr>
+            <tr>
+                <td class="ar">Порядок (Вес):</td>
+                <td class="al">
+                    <input type="number" name="posit" id="item_posit" value="0" size="10">
+                </td>
+            </tr>
+            <tr>
+                <td class="ar">Доступ:</td>
+                <td class="al">
+                    <select name="acc" id="item_acc">
+                        <option value="all">Всем</option>
+                        <option value="user">Только пользователям</option>
+                        <option value="guest">Только гостям</option>
+                    </select>
+                </td>
+            </tr>
+            <tr>
+                <td class="ar">Оформление (CSS класс):</td>
+                <td class="al">
+                    <input type="text" name="css" id="item_css" size="40">
+                </td>
+            </tr>
+            <tr>
+                <td class="ar">&nbsp;</td>
+                <td class="al">
+                    <input type="submit" class="but" value="Сохранить">
+                    <input type="button" class="but" value="Сброс" onclick="reset_form()">
+                </td>
+            </tr>
+        </table>
+    </form>
+</div>
+
+<script>
+function edit_item(el) {
+    const item = JSON.parse(el.getAttribute('data-json'));
+    document.getElementById('item_id').value = item.id;
+    document.getElementById('item_parent').value = item.parent_id;
+    document.getElementById('item_title').value = item.title;
+    document.getElementById('item_link').value = item.link;
+    document.getElementById('item_target').value = item.target;
+    document.getElementById('item_posit').value = item.posit;
+    document.getElementById('item_acc').value = item.acc;
+    document.getElementById('item_css').value = item.css || "";
+    document.getElementById('form_caption').innerText = "Редактировать пункт: " + item.title;
+}
+
+function reset_form() {
+    document.getElementById('item_id').value = "";
+    document.getElementById('item_parent').value = "0";
+    document.getElementById('item_title').value = "";
+    document.getElementById('item_link').value = "";
+    document.getElementById('item_target').value = "_self";
+    document.getElementById('item_posit').value = "0";
+    document.getElementById('item_acc').value = "all";
+    document.getElementById('item_css').value = "";
+    document.getElementById('form_caption').innerText = "Добавить новый пункт";
+}
+</script>
+{% endblock %}

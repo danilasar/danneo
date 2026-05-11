@@ -1,0 +1,73 @@
+{% extends "apanel/base.html" %}
+{% block content %}
+<div class="top_zag">Управление пакетами и модулями</div>
+
+<div class="content-box">
+    <div style="margin-bottom: 20px; padding: 15px; background: #f9f9f9; border: 1px solid #ddd; border-radius: 4px;">
+        <h3>Загрузить новый модуль (.mod / .zip)</h3>
+        <form action="/admin/modules/upload" method="post" enctype="multipart/form-data">
+            <input type="file" name="package" accept=".zip,.mod" required>
+            <button type="submit" class="button" style="background: #2196F3; color: white; padding: 5px 15px; border: none; border-radius: 3px; cursor: pointer;">Загрузить и проверить</button>
+        </form>
+    </div>
+
+    <p>Доступные локальные модули и kernel-модули. Блоки устанавливаются вместе со своим модулем.</p>
+    <br>
+    <table class="grid-table" style="width: 100%; border-collapse: collapse;">
+        <thead>
+            <tr style="background-color: #f5f5f5; text-align: left;">
+                <th style="padding: 8px; border: 1px solid #ddd;">ID</th>
+                <th style="padding: 8px; border: 1px solid #ddd;">Тип</th>
+                <th style="padding: 8px; border: 1px solid #ddd;">Название</th>
+                <th style="padding: 8px; border: 1px solid #ddd;">Сущности</th>
+                <th style="padding: 8px; border: 1px solid #ddd;">Версия</th>
+                <th style="padding: 8px; border: 1px solid #ddd;">Действия</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for pkg in packages %}
+            <tr>
+                <td style="padding: 8px; border: 1px solid #ddd;"><strong>{{ pkg.id }}</strong></td>
+                <td style="padding: 8px; border: 1px solid #ddd;">{{ pkg.package_type }}</td>
+                <td style="padding: 8px; border: 1px solid #ddd;">{{ pkg.name }}</td>
+                <td style="padding: 8px; border: 1px solid #ddd;">
+                    {% for ent in pkg.entities %}
+                        <a href="/admin/crud/{{ pkg.id }}/{{ ent }}/list" style="display:inline-block; margin-right:5px; background:#eee; padding:2px 5px; border-radius:3px; font-size:11px; text-decoration:none; color:#333;">{{ ent }}</a>
+                    {% endfor %}
+                </td>
+                <td style="padding: 8px; border: 1px solid #ddd;">{{ pkg.version }}</td>
+                <td style="padding: 8px; border: 1px solid #ddd;">
+                    {% if pkg.is_installed %}
+                        <form method="POST" action="/admin/modules/uninstall" style="display:inline;">
+                            <input type="hidden" name="package_id" value="{{ pkg.id }}">
+                            <button type="submit" style="color: red; cursor: pointer; border: none; background: none; text-decoration: underline;">Удалить</button>
+                        </form>
+                        &nbsp;|&nbsp;
+                        {% if pkg.is_enabled %}
+                        <form method="POST" action="/admin/modules/disable" style="display:inline;">
+                            <input type="hidden" name="package_id" value="{{ pkg.id }}">
+                            <button type="submit" style="color: orange; cursor: pointer; border: none; background: none; text-decoration: underline;">Выключить</button>
+                        </form>
+                        {% else %}
+                        <form method="POST" action="/admin/modules/enable" style="display:inline;">
+                            <input type="hidden" name="package_id" value="{{ pkg.id }}">
+                            <button type="submit" style="color: green; cursor: pointer; border: none; background: none; text-decoration: underline;">Включить</button>
+                        </form>
+                        {% endif %}
+                    {% else %}
+                        <form method="POST" action="/admin/modules/install" style="display:inline;">
+                            <input type="hidden" name="package_id" value="{{ pkg.id }}">
+                            <button type="submit" style="color: blue; cursor: pointer; border: none; background: none; text-decoration: underline;">Установить</button>
+                        </form>
+                    {% endif %}
+                </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="6" style="text-align: center; padding: 20px;">Нет доступных пакетов. Положите <code>module.toml</code> в <code>modules/</code></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

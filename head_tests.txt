@@ -1,0 +1,90 @@
+HEAD:core/src/auth.rs:            login: Set("test_admin".to_string()),
+HEAD:core/src/auth.rs:            login: "test_admin".to_string(),
+HEAD:core/src/cli/test_runner.rs:        fs::write(module_path.join("tests/integration/test_db.lua"), "function test_db() end").unwrap();
+HEAD:core/src/cli/test_runner.rs:        fs::write(module_path.join("tests/unit/test_1.lua"), "function test_x() end").unwrap();
+HEAD:core/src/cli/test_runner.rs:            function test_fail()
+HEAD:core/src/cli/test_runner.rs:            function test_logic()
+HEAD:core/src/cli/test_runner.rs:            function test_math()
+HEAD:core/src/cli/test_runner.rs:                    let reports = TestRunner::run_unit_test_file(&file).unwrap();
+HEAD:core/src/cli/test_runner.rs:        let reports = TestRunner::run_unit_test_file(&lua_file).unwrap();
+HEAD:core/src/cli/test_runner.rs:                    let _state = Self::boot_test_environment(&module_name).await?;
+HEAD:core/src/cli/test_runner.rs:                    let status = Self::run_integration_test_file(file.clone(), self.module_name.clone());
+HEAD:core/src/cli/test_runner.rs:                    match Self::run_unit_test_file(&file) {
+HEAD:core/src/cli/test_runner.rs:    pub async fn boot_test_environment(module_name: &str) -> Result<Arc<AppState>, String> {
+HEAD:core/src/cli/test_runner.rs:    pub fn run_integration_test_file(path: PathBuf, module_name: String) -> TestStatus {
+HEAD:core/src/cli/test_runner.rs:    pub fn run_unit_test_file(path: &std::path::Path) -> Result<Vec<TestReport>, String> {
+HEAD:core/src/module/blocks/handlers.rs:    async fn setup_test_db() -> sea_orm::DatabaseConnection {
+HEAD:core/src/module/blocks/handlers.rs:        let db = setup_test_db().await;
+HEAD:core/src/module/design/handlers.rs:    async fn setup_test_db() -> sea_orm::DatabaseConnection {
+HEAD:core/src/module/design/handlers.rs:        let db = setup_test_db().await;
+HEAD:core/tests/block_registry_tests.rs:    let (db, ctx, mut tera, state) = test_context().await;
+HEAD:core/tests/block_registry_tests.rs:    let (db, ctx, tera, state) = test_context().await;
+HEAD:core/tests/block_registry_tests.rs:    let state = common::create_test_state().await;
+HEAD:core/tests/common/mod.rs:pub async fn create_test_state() -> Arc<AppState> {
+HEAD:core/tests/crud_tests.rs:        table_name: "test_items".to_string(),
+HEAD:core/tests/module_system_integration_tests.rs:        .call_hook("test_mod", "test", Dynamic::UNIT, state.clone())
+HEAD:core/tests/module_system_integration_tests.rs:    engine.load_script_str("test_mod", script).await.unwrap();
+HEAD:core/tests/module_system_integration_tests.rs:    let state = common::create_test_state().await;
+HEAD:core/tests/rpc_system_tests.rs:async fn register_test_module(state: &AppState, code: &str) {
+HEAD:core/tests/rpc_system_tests.rs:    let state = common::create_test_state().await;
+HEAD:core/tests/rpc_system_tests.rs:    register_test_module(&state, "rec_mod").await;
+HEAD:core/tests/rpc_system_tests.rs:    register_test_module(&state, "test_mod").await;
+HEAD:core/tests/script_engine_tests.rs:        .call_hook("test_mod", "fail", Dynamic::UNIT, state.clone())
+HEAD:core/tests/script_engine_tests.rs:        .call_hook("test_mod", "hello", "World".into(), state.clone())
+HEAD:core/tests/script_engine_tests.rs:        .call_hook("test_mod", "loop_forever", Dynamic::UNIT, state.clone())
+HEAD:core/tests/script_engine_tests.rs:        .call_hook("test_mod", "process_entity", arg, state.clone())
+HEAD:core/tests/script_engine_tests.rs:    let state = common::create_test_state().await;
+HEAD:core/tests/system_integration_tests.rs:        code: Set("test_mod".to_string()),
+HEAD:core/tests/system_integration_tests.rs:    let mut req2 = Request::builder().uri("/test_mod/foo").body(Body::empty()).unwrap();
+HEAD:core/tests/system_integration_tests.rs:    let mut req = Request::builder().uri("/test_mod/foo").body(Body::empty()).unwrap();
+HEAD:core/tests/system_integration_tests.rs:    let res = state.script_engine.call_hook("test_sys", "check", script_rhai::Dynamic::UNIT, state.clone()).await.unwrap();
+HEAD:core/tests/system_integration_tests.rs:    req2.extensions_mut().insert(danneo_core::module::ModuleInfo { code: "test_mod".to_string() });
+HEAD:core/tests/system_integration_tests.rs:    req.extensions_mut().insert(danneo_core::module::ModuleInfo { code: "test_mod".to_string() });
+HEAD:core/tests/system_integration_tests.rs:        .route("/test_mod/foo", axum::routing::get(|| async { "OK" }))
+HEAD:core/tests/system_integration_tests.rs:    state.script_engine.load_script_str("test_sys", script).await.unwrap();
+HEAD:modules/mod_news/tests/unit/test.lua:function test_first()
+test_admin_login_success
+test_admin_menu_rpc_scenarios
+test_all_modules_lua_tests
+test_bootstrap_idempotency
+test_casbin_bridge_with_function_registry
+test_context
+test_create_insert_select
+test_db_isolation_lua_prefixes
+test_db_update_delete
+test_dependency_resolver_missing_mandatory
+test_dependency_resolver_success
+test_dependency_resolver_version_mismatch
+test_function_not_found
+test_generate_slug_russian
+test_generate_slug_special_chars
+test_hook_not_found
+test_hook_with_complex_data
+test_jwt_creation_and_verification
+test_jwt_invalid_token
+test_list_blocks
+test_list_positions
+test_load_and_call_simple_hook
+test_middleware_blocks_disabled_module
+test_mod_news_menu_registration_via_rpc
+test_modular_middleware
+test_module_availability_api_lua
+test_module_availability_api_rust
+test_module_db_api_isolation
+test_native_function_call
+test_pubgrub_semantic_version_conversion
+test_rbac_and_mac
+test_rpc_access_to_disabled_module
+test_rpc_max_depth
+test_rpc_native_call
+test_rpc_not_found
+test_run_unit_tests_failure
+test_run_unit_tests_success
+test_save_file_path_traversal_protection
+test_save_position
+test_scanner_finds_files
+test_scripted_function_call
+test_script_infinite_loop
+test_script_runtime_error
+test_seo_meta_serializes_for_tera
+test_show_design_page

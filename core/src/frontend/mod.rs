@@ -19,17 +19,42 @@ pub async fn prepare_frontend_context(state: Arc<AppState>, context: &mut Contex
         settings: state.settings.clone(),
         state: state.clone(),
     });
-    let rendered_blocks = state.block_registry.get_all_positions_html(block_ctx, &state.tera).await;
+    let rendered_blocks = state
+        .block_registry
+        .get_all_positions_html(
+            block_ctx.clone() as Arc<dyn std::any::Any + Send + Sync>,
+            &state.tera,
+        )
+        .await;
+
     context.insert("positions", &rendered_blocks);
 
     // Fetch site menu via RPC
     let rpc_ctx = crate::rpc::RpcContext::default();
-    let top_menu_res = state.rpc_registry.call("mod_menu", "get_menu", serde_json::json!({"position": "top"}), rpc_ctx.clone(), state.clone()).await;
+    let top_menu_res = state
+        .rpc_registry
+        .call(
+            "mod_menu",
+            "get_menu",
+            serde_json::json!({"position": "top"}),
+            rpc_ctx.clone(),
+            state.clone(),
+        )
+        .await;
     if let Ok(items) = top_menu_res {
         context.insert("top_menu_items", &items);
     }
 
-    let bot_menu_res = state.rpc_registry.call("mod_menu", "get_menu", serde_json::json!({"position": "bottom"}), rpc_ctx, state.clone()).await;
+    let bot_menu_res = state
+        .rpc_registry
+        .call(
+            "mod_menu",
+            "get_menu",
+            serde_json::json!({"position": "bottom"}),
+            rpc_ctx,
+            state.clone(),
+        )
+        .await;
     if let Ok(items) = bot_menu_res {
         context.insert("bot_menu_items", &items);
     }
@@ -49,11 +74,11 @@ pub async fn dispatch(
     let path = uri.path().trim_start_matches('/').to_string();
     let mut params = std::collections::HashMap::new();
     let match_result = {
-        let routes = state.routes.read().await;
+        let frontend_routes = state.routes.get_frontend_routes().await;
         let mut found = None;
         let method_str = method.as_str().to_uppercase();
 
-        for (module_code, descriptor) in &routes.frontend_routes {
+        for (module_code, descriptor) in &frontend_routes {
             if descriptor.method.to_uppercase() == method_str {
                 if let Some(p) = match_route(&descriptor.path, &path) {
                     found = Some((module_code.clone(), descriptor.clone()));
@@ -121,11 +146,9 @@ async fn render_script_route(
         "params": params,
     });
 
-    let dynamic_arg = script_rhai::serde::to_dynamic(arg).unwrap();
-
     match state
         .script_engine
-        .call_hook(module_code, "frontend_dispatch", dynamic_arg, state.clone())
+        .call_hook(module_code, "frontend_dispatch", arg, state.clone())
         .await
     {
         Ok(res) => handle_script_response_internal(state, module_code, res).await,
@@ -141,7 +164,7 @@ async fn render_script_route(
 }
 
 pub fn handle_script_response(res: script_rhai::Dynamic) -> Response {
-    // This is a bridge for async context if needed, but since we are in a handler, 
+    // This is a bridge for async context if needed, but since we are in a handler,
     // we might need a sync version or handle it differently.
     // Actually, let's make it more general.
     if let Some(s) = res.clone().try_cast::<String>() {
@@ -155,27 +178,26 @@ pub fn handle_script_response(res: script_rhai::Dynamic) -> Response {
 pub async fn handle_script_response_internal(
     state: Arc<AppState>,
     module_code: &str,
-    res: script_rhai::Dynamic,
+    res: serde_json::Value,
 ) -> Response {
-    if let Some(res_map) = res.clone().try_cast::<script_rhai::Map>() {
+    if let Some(res_map) = res.as_object() {
         let template = res_map
             .get("template")
-            .and_then(|v| v.clone().into_string().ok())
-            .unwrap_or_else(|| "index.html".to_string());
+            .and_then(|v| v.as_str())
+            .unwrap_or_else(|| "index.html")
+            .to_string();
 
         let context_val = res_map
             .get("context")
             .cloned()
-            .unwrap_or_else(|| script_rhai::Dynamic::from(script_rhai::Map::new()));
+            .unwrap_or_else(|| serde_json::json!({}));
 
         let mut ctx = Context::new();
         prepare_frontend_context(state.clone(), &mut ctx).await;
 
-        if let Ok(ctx_json) = script_rhai::serde::from_dynamic::<serde_json::Value>(&context_val) {
-            if let Some(obj) = ctx_json.as_object() {
-                for (k, v) in obj {
-                    ctx.insert(k, v);
-                }
+        if let Some(obj) = context_val.as_object() {
+            for (k, v) in obj {
+                ctx.insert(k, v);
             }
         }
 
@@ -188,10 +210,10 @@ pub async fn handle_script_response_internal(
                 Html(format!("<h1>Template Error</h1><pre>{}</pre>", e)).into_response()
             }
         }
-    } else if let Some(s) = res.try_cast::<String>() {
-        Html(s).into_response()
+    } else if let Some(s) = res.as_str() {
+        Html(s.to_string()).into_response()
     } else {
-        "Invalid response from Lua frontend_dispatch".into_response()
+        "Invalid response from script frontend_dispatch".into_response()
     }
 }
 

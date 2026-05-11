@@ -1,0 +1,25 @@
+<table class="cats">
+    <tr class="cat-head">
+        <td>{{ all_icon }}</td>
+        <td>{{ cd }}</td>
+        <td class="ac">{{ all_col }}</td>
+    </tr>
+    {# В новой системе здесь должен быть цикл по категориям, 
+       но пока мы просто оставляем структуру без битых тегов set #}
+    {% for cat in categories %}
+    <tr class="cat-body">
+        <td class="ac wpc_5">{{ cat.icon | safe }}</td>
+        <td class="al wpc_80">
+            {{ cat.title }}
+            {% if cat.desc %}<br/>{{ cat.desc }}{% endif %}
+            {% if cat.sub %}<br/>{{ cat.sub }}{% endif %}
+        </td>
+        <td class="ac va wpc_15">{{ cat.total }}</td>
+    </tr>
+    {% endfor %}
+    <tr class="cat-info">
+        <td colspan="3" class="ar">
+            <em>{{ all_alls }}: {{ alltotal }}, {{ all_cats }}: {{ allcat }}, {{ news_hits }}: {{ allhits }}</em>
+        </td>
+    </tr> 
+</table>

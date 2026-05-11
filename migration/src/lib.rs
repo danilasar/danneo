@@ -16,21 +16,21 @@ impl MigratorTrait for Migrator {
         ];
 
         // Collect all migrations from other crates (modules)
-        for reg in inventory::iter::<ModuleMigrationRegistration> {
-            migrations.push(Box::new(MigrationWrapper { inner: reg.migration }));
+        for reg in inventory::iter::<danneo_sdk::module::migration::ModuleMigrationRegistration>() {
+            migrations.push(Box::new(MigrationWrapper {
+                inner: reg.migration,
+            }));
         }
 
         // Keep them sorted by name for consistency
         migrations.sort_by(|a, b| a.name().cmp(b.name()));
+
+        // Deduplicate by name
+        migrations.dedup_by(|a, b| a.name() == b.name());
+
         migrations
     }
 }
-
-pub struct ModuleMigrationRegistration {
-    pub migration: &'static dyn MigrationTrait,
-}
-
-inventory::collect!(ModuleMigrationRegistration);
 
 struct MigrationWrapper {
     inner: &'static dyn MigrationTrait,

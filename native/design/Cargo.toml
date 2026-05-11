@@ -1,0 +1,18 @@
+[package]
+name = "danneo-native-design"
+version = "2.0.0"
+edition = "2024"
+
+[dependencies]
+danneo-sdk = { path = "../../danneo-sdk" }
+sea-orm.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+async-trait.workspace = true
+axum.workspace = true
+tracing.workspace = true
+tokio.workspace = true
+
+[dev-dependencies]
+danneo-core = { path = "../../core" }
+tokio = { workspace = true, features = ["full"] }

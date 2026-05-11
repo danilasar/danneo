@@ -1,0 +1,48 @@
+{% extends "apanel/base.html" %}
+
+{% block content %}
+<div class="section">
+    <form action="/admin/crud/{{ module }}/{{ entity }}/save" method="POST">
+        {% if record and primary_key and record[primary_key] %}
+            <input type="hidden" name="{{ primary_key }}" value="{{ record[primary_key] | default(value="") }}">
+        {% endif %}
+
+        <table class="work">
+            <caption>
+                {% if record and record[primary_key] %}
+                    Редактирование записи: {{ entity }}
+                {% else %}
+                    Создание новой записи: {{ entity }}
+                {% endif %}
+            </caption>
+            
+            {% for field in schema.fields %}
+                {% if not field.primary_key %}
+                <tr>
+                    <td class="al" style="width:200px;">
+                        {{ field.label | default(value=field.name) }}
+                        {% if field.nullable is defined and not field.nullable %}<span style="color:red;">*</span>{% endif %}
+                    </td>
+                    <td class="al">
+                        {% if field.field_type == "text" or field.field_type == "html" %}
+                            <textarea name="{{ field.name }}" style="width:100%; height:150px;">{{ record[field.name] | default(value="") }}</textarea>
+                        {% elif field.field_type == "boolean" or field.field_type == "bool" %}
+                            <input type="checkbox" name="{{ field.name }}" value="true" {% if record[field.name] %}checked{% endif %}>
+                        {% else %}
+                            <input type="text" name="{{ field.name }}" value="{{ record[field.name] | default(value="") }}" style="width:400px;">
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endif %}
+            {% endfor %}
+
+            <tr>
+                <td class="ac" colspan="2" style="padding:15px;">
+                    <input type="submit" value="Сохранить" class="interface">
+                    <a href="/admin/crud/{{ module }}/{{ entity }}/list" class="interface" style="margin-left:10px;">Отмена</a>
+                </td>
+            </tr>
+        </table>
+    </form>
+</div>
+{% endblock %}

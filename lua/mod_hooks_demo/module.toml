@@ -1,0 +1,13 @@
+[package]
+id = "mod_hooks_demo"
+type = "module"
+version = "0.1.0"
+name = "Hooks Demo"
+description = "Demonstrates Lua scripting hooks"
+author = "Gemini CLI"
+
+[module]
+runtime_type = "scripted"
+
+[entrypoints]
+hooks = "scripts/hooks.lua"

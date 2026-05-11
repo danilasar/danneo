@@ -1,0 +1,30 @@
+[package]
+id = "mod_media"
+name = "Media Manager"
+version = "1.0.0"
+description = "Handles file uploads and storage interaction"
+type = "module"
+
+[module]
+runtime_type = "lua"
+
+[dependencies]
+storage = ">=2.0.0"
+
+[entrypoints]
+hooks = "scripts/hooks.lua"
+
+[[admin_routes]]
+name = "upload_page"
+method = "GET"
+path = "/media"
+handler = "upload_page"
+
+[[admin_routes]]
+name = "do_upload"
+method = "POST"
+path = "/media/upload"
+handler = "do_upload"
+
+[install]
+default_enabled = true

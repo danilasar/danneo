@@ -1,0 +1,20 @@
+[package]
+name = "danneo-native-casbin"
+version = "2.0.0"
+edition = "2024"
+
+[dependencies]
+danneo-sdk = { path = "../../danneo-sdk" }
+sea-orm.workspace = true
+casbin.workspace = true
+async-trait.workspace = true
+tracing.workspace = true
+serde_json.workspace = true
+tokio = { workspace = true, features = ["sync"] }
+once_cell = "1.21.4"
+futures = "0.3"
+sea-orm-adapter = { workspace = true }
+
+[dev-dependencies]
+danneo-core = { path = "../../core" }
+tokio = { workspace = true, features = ["full"] }

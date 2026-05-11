@@ -1,0 +1,27 @@
+{% extends "apanel/base.html" %}
+{% block content %}
+<div class="section">
+    <table class="work">
+        <caption>Управление новостями</caption>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Заголовок</th>
+                <th>Дата</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in news %}
+            <tr>
+                <td>{{ item.id }}</td>
+                <td>{{ item.title }}</td>
+                <td>{{ item.created_at }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <div style="margin-top:20px;">
+        <a href="/admin/m/mod_news/add" class="interface">Добавить новость</a>
+    </div>
+</div>
+{% endblock %}

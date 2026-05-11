@@ -133,10 +133,7 @@ async fn native_module_block_renders_through_same_registry() {
     let script_engine = state.script_engine.clone();
     let registry = BlockRegistry::new(db.clone(), script_engine);
 
-    let native_modules = {
-        let modules_guard = state.modules.read().await;
-        modules_guard.native_modules.read().await.clone()
-    };
+    let native_modules = state.modules.get_native_modules().await;
     registry.init(native_modules).await;
 
     let html = registry

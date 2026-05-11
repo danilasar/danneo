@@ -1,0 +1,15 @@
+[package]
+id = "mod_hello"
+type = "module"
+version = "1.0.0"
+name = "Hello World Module"
+description = "A simple demonstration module"
+author = "Gemini CLI"
+
+[module]
+runtime_type = "lua"
+
+[entrypoints]
+hooks = "scripts/hooks.lua"
+entities = "entities/greeting.json"
+frontend_routes = "routes/frontend.json"

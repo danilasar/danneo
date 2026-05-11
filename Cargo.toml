@@ -1,6 +1,20 @@
 [workspace]
 resolver = "2"
-members = ["core", "migration"]
+members = [
+    "core",
+    "migration",
+    "danneo-sdk",
+    "native/admin_menu",
+    "native/blocks",
+    "native/casbin",
+    "native/design",
+    "native/image",
+    "native/native-demo",
+    "native/security",
+    "native/seo",
+    "native/settings",
+    "native/storage", "danneo-macros",
+]
 
 [workspace.dependencies]
 axum = { version = "0.7.9", features = ["multipart"] }
@@ -45,6 +59,7 @@ toml = "1.1.2"
 thiserror = "2.0.18"
 zip = "8.6.0"
 log = "0.4.29"
+sea-query = "0.32.7"
 
 uuid = { version = "1.0", features = ["v4"] }
 # Casbin depends on crates.io Rhai with restrictive features (`no_function`,

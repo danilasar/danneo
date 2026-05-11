@@ -16,25 +16,24 @@ async fn test_admin_menu_rpc_scenarios() {
         .unwrap();
 
     // We need a real AppState because of Arc fields
-    let state = Arc::new(
-        danneo_core::state::AppState::new(db_arc.as_ref().clone())
-            .await
-            .unwrap(),
-    );
+    let state = danneo_core::state::init_state(db_arc.as_ref().clone())
+        .await
+        .unwrap();
     let menu_mod = {
-        let modules_guard = state.modules.read().await;
-        let native_modules = modules_guard.native_modules.read().await;
+        let native_modules = state.modules.get_native_modules().await;
         native_modules.get("admin_menu").unwrap().clone()
     };
 
     // 2.1 MUST Register modules in core_modules for JOIN to work
     {
-        use sea_orm::{ActiveModelTrait, Set, QueryFilter, ColumnTrait, EntityTrait};
+        use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
         let now: chrono::DateTime<chrono::FixedOffset> = chrono::Utc::now().into();
-        
+
         let existing = danneo_core::models::core_modules::Entity::find()
             .filter(danneo_core::models::core_modules::Column::Code.eq("mod_news"))
-            .one(db_arc.as_ref()).await.unwrap();
+            .one(db_arc.as_ref())
+            .await
+            .unwrap();
 
         if existing.is_none() {
             danneo_core::models::core_modules::ActiveModel {
@@ -51,12 +50,17 @@ async fn test_admin_menu_rpc_scenarios() {
                 installed_at: Set(now),
                 updated_at: Set(now),
                 ..Default::default()
-            }.insert(db_arc.as_ref()).await.unwrap();
+            }
+            .insert(db_arc.as_ref())
+            .await
+            .unwrap();
         }
 
         let existing_admin = danneo_core::models::core_modules::Entity::find()
             .filter(danneo_core::models::core_modules::Column::Code.eq("admin_menu"))
-            .one(db_arc.as_ref()).await.unwrap();
+            .one(db_arc.as_ref())
+            .await
+            .unwrap();
 
         if existing_admin.is_none() {
             danneo_core::models::core_modules::ActiveModel {
@@ -73,7 +77,10 @@ async fn test_admin_menu_rpc_scenarios() {
                 installed_at: Set(now),
                 updated_at: Set(now),
                 ..Default::default()
-            }.insert(db_arc.as_ref()).await.unwrap();
+            }
+            .insert(db_arc.as_ref())
+            .await
+            .unwrap();
         }
     }
 
@@ -120,7 +127,10 @@ async fn test_admin_menu_rpc_scenarios() {
 
     // Verify our custom category and item exist
     let sections = tree["supercategories"].as_array().unwrap();
-    let content_sec = sections.iter().find(|s| s["code"] == "content").expect("Content supercategory not found");
+    let content_sec = sections
+        .iter()
+        .find(|s| s["code"] == "content")
+        .expect("Content supercategory not found");
     let categories = content_sec["categories"].as_array().unwrap();
     let pub_cat = categories
         .iter()
@@ -152,7 +162,10 @@ async fn test_admin_menu_rpc_scenarios() {
         .await;
     let tree = res.unwrap();
     let sections = tree["supercategories"].as_array().unwrap();
-    let content_sec = sections.iter().find(|s| s["code"] == "content").expect("Content supercategory not found after move");
+    let content_sec = sections
+        .iter()
+        .find(|s| s["code"] == "content")
+        .expect("Content supercategory not found after move");
     let news_cat = content_sec["categories"]
         .as_array()
         .unwrap()
@@ -211,6 +224,9 @@ async fn test_admin_menu_rpc_scenarios() {
     if let Some(sec) = content_sec_opt {
         let categories = sec["categories"].as_array().unwrap();
         let news_cat = categories.iter().find(|c| c["code"] == "news");
-        assert!(news_cat.is_none(), "News category should be pruned when its only item is hidden and module disabled");
+        assert!(
+            news_cat.is_none(),
+            "News category should be pruned when its only item is hidden and module disabled"
+        );
     }
 }
